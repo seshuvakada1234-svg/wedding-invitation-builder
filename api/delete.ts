@@ -14,16 +14,16 @@ export default async function handler(req, res) {
     const accountId = process.env.R2_ACCOUNT_ID;
     const accessKeyId = process.env.R2_ACCESS_KEY_ID;
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    const customEndpoint = process.env.R2_ENDPOINT;
-    const bucketName = process.env.R2_BUCKET || process.env.R2_BUCKET_NAME;
+    const bucket = process.env.R2_BUCKET;
+    const endpoint = process.env.R2_ENDPOINT;
 
-    if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-      throw new Error("Missing R2 configuration environment variables.");
+    if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !endpoint) {
+      return res.status(500).json({ error: "Missing R2 configuration environment variables" });
     }
 
     const client = new S3Client({
       region: "auto",
-      endpoint: customEndpoint || `https://${accountId}.r2.cloudflarestorage.com`,
+      endpoint,
       credentials: {
         accessKeyId,
         secretAccessKey,
@@ -32,7 +32,7 @@ export default async function handler(req, res) {
 
     await client.send(
       new DeleteObjectCommand({
-        Bucket: bucketName,
+        Bucket: bucket,
         Key: key,
       })
     );
