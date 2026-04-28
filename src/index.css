@@ -1,0 +1,69 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-editorial-bg: #F9F7F2;
+  --color-editorial-ink: #2D2D2D;
+  --color-editorial-secondary: #6B665E;
+  --color-editorial-muted: #9E978C;
+  --color-editorial-border: #E5E1D8;
+  --color-editorial-accent: #C48F5B;
+  --color-editorial-surface: #FFFFFF;
+}
+
+@layer base {
+  body {
+    @apply bg-editorial-bg text-editorial-ink font-sans;
+  }
+}
+
+.markdown-body {
+  @apply font-serif leading-relaxed;
+}
+
+.editorial-card {
+  @apply bg-editorial-surface border border-editorial-border rounded-lg shadow-sm overflow-hidden transition-all hover:shadow-md;
+}
+
+.editorial-button {
+  @apply px-6 py-2.5 bg-editorial-ink text-white text-sm font-medium rounded-full transition-all hover:bg-black active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.editorial-input {
+  @apply w-full border border-editorial-border rounded px-3 py-2 text-sm focus:outline-none focus:border-editorial-ink focus:ring-1 focus:ring-editorial-ink/10 transition-all;
+}
+
+.editorial-label {
+  @apply block text-[11px] font-bold text-editorial-ink uppercase mb-1.5 tracking-wider;
+}
+
+.editorial-section-title {
+  @apply text-xs uppercase tracking-[0.2em] font-semibold text-editorial-muted mb-4 border-b border-editorial-border pb-2;
+}
+
+/* Scrollbar Utilities */
+.custom-scrollbar::-webkit-scrollbar,
+.scrollbar-hide::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-scrollbar,
+.scrollbar-hide,
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Global scrollbar hiding if needed - use with caution */
+.hide-all-scrollbars *::-webkit-scrollbar {
+  display: none;
+}
+.hide-all-scrollbars * {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

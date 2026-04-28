@@ -1,0 +1,57 @@
+{
+  "entities": {
+    "invite": {
+      "title": "Wedding Invite",
+      "description": "Details for a wedding invitation website",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "slug": { "type": "string" },
+        "brideName": { "type": "string" },
+        "groomName": { "type": "string" },
+        "weddingDate": { "type": "string" },
+        "location": { "type": "string" },
+        "template": { "type": "string", "enum": ["beach", "royal", "minimal", "royal-wedding", "konaseema", "kerala-wedding", "kerala-envelope-reveal", "housewarming-south"] },
+        "isPaid": { "type": "boolean" },
+        "views": { "type": "number" },
+        "viewLimit": { "type": "number" },
+        "coverImage": { "type": "string" },
+        "coverImageKey": { "type": "string" },
+        "galleryImages": { "type": "array", "items": { "type": "string" } },
+        "galleryImageKeys": { "type": "array", "items": { "type": "string" } },
+        "events": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "date": { "type": "string" },
+              "time": { "type": "string" },
+              "location": { "type": "string" }
+            }
+          }
+        },
+        "googleMapsLink": { "type": "string" },
+        "coordinates": { "type": "string" },
+        "venueAddress": { "type": "string" },
+        "venueCity": { "type": "string" },
+        "muhurtham": { "type": "string" },
+        "deity": { "type": "string" },
+        "family": { "type": "string" },
+        "enable3D": { "type": "boolean" },
+        "enableEnvelope": { "type": "boolean" },
+        "eventName": { "type": "string" },
+        "story": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "slug", "brideName", "groomName", "weddingDate", "template"]
+    }
+  },
+  "firestore": {
+    "/invites/{inviteId}": {
+      "schema": "invite",
+      "description": "Collection of wedding invitation sites"
+    }
+  }
+}
