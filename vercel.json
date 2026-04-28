@@ -1,21 +1,19 @@
 {
-  "version": 2,
   "functions": {
-    "server.ts": {
-      "runtime": "nodejs18.x"
-    },
     "api/*.js": {
-      "runtime": "nodejs18.x"
+      "runtime": "nodejs24.x"
+    },
+    "api/*.ts": {
+      "runtime": "nodejs24.x"
+    },
+    "server.ts": {
+      "runtime": "nodejs24.x"
     }
   },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/server.ts"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/"
+      "destination": "/api/$1"
     }
   ]
 }

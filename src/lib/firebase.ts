@@ -11,42 +11,37 @@ import firebaseConfig from "../../firebase-applet-config.json";
 const app = initializeApp(firebaseConfig);
 
 // Initialize Firestore with robust settings for sandboxed environments.
-// We use experimentalForceLongPolling to bypass potential WebSocket/HTTP2 issues in proxies.
+// Some environments block WebSockets but also have issues with certain Long Polling headers.
 export const db = initializeFirestore(app, {
   experimentalForceLongPolling: true,
   localCache: memoryLocalCache(),
+  host: 'firestore.googleapis.com',
+  ssl: true,
 }, firebaseConfig.firestoreDatabaseId || "(default)");
 
-console.log("Firestore initialized with Config:", {
-  projectId: firebaseConfig.projectId,
-  databaseId: firebaseConfig.firestoreDatabaseId || "(default)",
-  timestamp: new Date().toISOString()
-});
+console.log("Firestore initialized with Project ID:", firebaseConfig.projectId);
+// Note: if using multiple databases, you might need:
+// export const db = initializeFirestore(app, {...}, firebaseConfig.firestoreDatabaseId);
 
 // Connection test as required by Firebase integration standards
 async function testConnection() {
   const start = Date.now();
-  console.log("Testing Firestore connectivity...");
+  console.log("Testing Firestore connectivity with Database ID:", firebaseConfig.firestoreDatabaseId || "(default)");
   try {
     // getDocFromServer is the most reliable "ping" to verify backend reachability.
-    // We use a specific path that might exist or just fail with permission denied (which confirms connection).
-    await getDocFromServer(doc(db, '_connection_test_', 'ping'));
+    const testDoc = doc(db, '_connection_test_', 'ping');
+    await getDocFromServer(testDoc);
     console.log(`Firestore connection verified in ${Date.now() - start}ms.`);
   } catch (error: any) {
     const duration = Date.now() - start;
+    console.warn(`Connection test result after ${duration}ms:`, error.code || error.message);
     
     if (error.code === 'permission-denied') {
       console.log(`Firestore connection verified (Permission Denied as expected) in ${duration}ms.`);
+    } else if (error.code === 'unavailable') {
+      console.error("Firestore backend is UNAVAILABLE. This is likely a network/proxy issue.");
     } else {
-      console.error(`Firestore connection check failed after ${duration}ms:`, {
-        code: error.code,
-        message: error.message,
-        name: error.name
-      });
-      
-      if (duration >= 9000) {
-        console.error("CRITICAL: Firestore connection timed out. This often happens if the environment blocks WebSockets and Long Polling, or if the Firebase project is inactive.");
-      }
+      console.error(`Firestore connection check failed (${error.code}):`, error.message);
     }
   }
 }
