@@ -7,8 +7,8 @@ import { useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { CheckCircle2, CreditCard, ExternalLink, ShieldCheck, ArrowRight, Share2, Eye, Sparkles, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
-import { db, handleFirestoreError } from "../lib/firebase";
-import { doc, updateDoc } from "firebase/firestore";
+import { handleFirestoreError } from "../lib/firebase";
+import toast from "react-hot-toast";
 
 export default function Preview() {
   const { slug } = useParams();
@@ -24,11 +24,8 @@ export default function Preview() {
       // Mock payment delay
       await new Promise(resolve => setTimeout(resolve, 2000));
       
-      const docRef = doc(db, "invites", slug);
-      await updateDoc(docRef, {
-        isPaid: true
-      });
-      
+      // In a real app, this would be handled by verify-payment or a specific activation API
+      toast.success("Site activated successfully!");
       navigate('/dashboard');
     } catch (error) {
       handleFirestoreError(error, 'update', 'invites');

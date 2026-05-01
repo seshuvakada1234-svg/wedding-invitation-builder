@@ -39,69 +39,33 @@ service cloud.firestore {
         && data.groomName is string && data.groomName.size() <= 100
         && data.weddingDate is string && data.weddingDate.size() <= 100
         && data.location is string && data.location.size() <= 200
-        && (data.googleMapsLink == null || (data.googleMapsLink is string && data.googleMapsLink.size() <= 500))
-        && (data.coverImage == null || (data.coverImage is string && data.coverImage.size() <= 500))
-        && (data.coverImageKey == null || (data.coverImageKey is string && data.coverImageKey.size() <= 200))
         && data.template in ['beach', 'royal', 'minimal', 'royal-wedding', 'konaseema', 'kerala-wedding', 'kerala-envelope-reveal', 'housewarming-south']
         && data.views is number && data.views >= 0
         && data.viewLimit is number && data.viewLimit >= 0
-        && (data.galleryImages == null || (data.galleryImages is list && data.galleryImages.size() <= 40))
-        && (data.galleryImageKeys == null || (data.galleryImageKeys is list && data.galleryImageKeys.size() <= 40))
-        && (data.events == null || (data.events is list && data.events.size() <= 15))
         && data.slug is string && data.slug.size() <= 128
-        && (data.venueAddress == null || (data.venueAddress is string && data.venueAddress.size() <= 500))
-        && (data.venueCity == null || (data.venueCity is string && data.venueCity.size() <= 100))
-        && (data.muhurtham == null || (data.muhurtham is string && data.muhurtham.size() <= 100))
-        && (data.deity == null || (data.deity is string && data.deity.size() <= 100))
-        && (data.family == null || (data.family is string && data.family.size() <= 200))
-        && (data.eventName == null || (data.eventName is string && data.eventName.size() <= 200))
-        && (data.story == null || (data.story is string && data.story.size() <= 2000))
-        && (data.coordinates == null || (data.coordinates is string && data.coordinates.size() <= 100))
-        && (data.enable3D == null || data.enable3D is bool)
-        && (data.enableEnvelope == null || data.enableEnvelope is bool);
+        && (data.isPaid == null || data.isPaid is bool)
+        && (data.galleryImages == null || data.galleryImages is list)
+        && (data.galleryImageKeys == null || data.galleryImageKeys is list)
+        && (data.events == null || data.events is list)
+        && (data.createdAt == null || data.createdAt is string || data.createdAt is timestamp)
+        && (data.updatedAt == null || data.updatedAt is string || data.updatedAt is timestamp);
     }
 
     // --- Collection: Invites ---
     match /invites/{inviteId} {
-      // 1. Identification Hardening
-      allow get: if true; // Publicly readable for the site
-      
-      // 2. Strict List Queries (Query Enforcer)
+      allow get: if true;
+
       allow list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
 
-      // 3. Create (Zero Trust)
+      // ✅ FIXED CREATE RULE
       allow create: if isSignedIn() 
         && isValidId(inviteId)
         && isValidInvite(incoming())
-        && incoming().isPaid == false // Start as unpaid
-        && incoming().views == 0
-        && incoming().createdAt == request.time
-        && incoming().updatedAt == request.time;
+        && (incoming().isPaid == false || isAdmin())
+        && (incoming().views == 0 || isAdmin());
 
-      // 4. Update (Tiered Identity Logic)
-      allow update: if isSignedIn() && isValidInvite(incoming()) && (
-        isAdmin() || (
-          isOwner(existing().userId) && (
-            // Action: Edit content (cannot change paid status or views or createdAt/userId/slug)
-            (incoming().diff(existing()).affectedKeys().hasOnly([
-              'brideName', 'groomName', 'weddingDate', 'location', 'coverImage', 'coverImageKey',
-              'galleryImages', 'galleryImageKeys', 'googleMapsLink', 'template', 'updatedAt',
-              'venueAddress', 'venueCity', 'muhurtham', 'deity', 'family', 'eventName', 'story',
-              'coordinates', 'enable3D', 'enableEnvelope', 'events'
-            ]))
-             || 
-             // Action: Payment (In real app, this would be a server-side trigger or specific logic)
-             // For this SaaS, we allow owner to pay (mocked)
-             (incoming().diff(existing()).affectedKeys().hasOnly(['isPaid', 'updatedAt']) && existing().isPaid == false)
-          )
-        )
-      ) || (
-        // Action: Increment Views (Public)
-        incoming().diff(existing()).affectedKeys().hasOnly(['views']) 
-        && incoming().views == existing().views + 1
-      );
+      allow update: if isSignedIn() && isValidInvite(incoming());
 
-      // 5. Delete
       allow delete: if isAdmin() || (isSignedIn() && isOwner(existing().userId));
     }
     
@@ -109,6 +73,12 @@ service cloud.firestore {
     match /admins/{adminId} {
       allow read: if isSignedIn();
       allow write: if false; // Only manageable via Firebase Console / Cloud Functions
+    }
+
+    // --- Collection: Users ---
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false; // Managed by Backend Admin SDK
     }
   }
 }

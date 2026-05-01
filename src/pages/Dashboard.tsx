@@ -18,8 +18,7 @@ import {
   Loader2
 } from "lucide-react";
 import { motion } from "motion/react";
-import { db, auth } from "../lib/firebase";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { auth, authFetch } from "../lib/firebase";
 import { WeddingInvite } from "../types";
 
 export default function Dashboard() {
@@ -30,25 +29,34 @@ export default function Dashboard() {
   useEffect(() => {
     async function fetchSites() {
       if (!auth.currentUser) {
-        navigate('/login');
+        // Wait a bit as auth might be initializing
         return;
       }
       try {
-        const q = query(
-          collection(db, "invites"), 
-          where("userId", "==", auth.currentUser.uid),
-          orderBy("createdAt", "desc")
-        );
-        const querySnapshot = await getDocs(q);
-        const sitesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WeddingInvite));
-        setSites(sitesData);
+        const res = await authFetch("/api/get-invites");
+        const data = await res.json();
+        if (data.success) {
+          setSites(data.invites);
+        } else {
+          console.error("Failed to fetch invites:", data.error);
+        }
       } catch (err) {
-        console.error(err);
+        console.error("Dashboard fetch error:", err);
       } finally {
         setLoading(false);
       }
     }
-    fetchSites();
+    
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        fetchSites();
+      } else {
+        setLoading(false);
+        navigate('/login');
+      }
+    });
+
+    return () => unsubscribe();
   }, [navigate]);
 
   if (loading) {
@@ -127,7 +135,14 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-2">
                     <ExternalLink className="w-4 h-4 text-editorial-muted" />
-                    <span className="font-mono text-editorial-accent">union.com/site/{site.slug}</span>
+                    <a 
+                      href={`/invite/${site.id || site.slug}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="font-mono text-editorial-accent hover:underline"
+                    >
+                      union.com/invite/{site.id || site.slug}
+                    </a>
                   </div>
                 </div>
 

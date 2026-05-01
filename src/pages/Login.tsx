@@ -7,12 +7,14 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Heart, ArrowRight, Github } from "lucide-react";
 import { motion } from "motion/react";
-import { signInWithGoogle } from "../lib/firebase";
+import { loginWithGoogle } from "../lib/firebase";
+import toast from "react-hot-toast";
 
 export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,24 +23,34 @@ export default function Login() {
       // In a real app, use signInWithEmailAndPassword
       // For this SaaS demo, we simulate success
       await new Promise(resolve => setTimeout(resolve, 800));
+      toast.success("Welcome back!");
       navigate('/dashboard');
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      toast.error(error.message || "Login failed");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
+    if (isLoading) return;
+    setIsLoading(true);
     try {
-      await signInWithGoogle();
+      await loginWithGoogle();
+      toast.success("Signed in with Google");
       navigate('/dashboard');
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
+        toast.error("Sign-in cancelled or popup closed.");
+      } else {
+        console.error("Auth error:", error.code, error.message);
+        toast.error(error.message || "Google login failed");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
-
-  const [isLoading, setIsLoading] = useState(false);
 
   return (
     <div className="flex-1 flex items-center justify-center p-8 bg-editorial-bg">
@@ -98,10 +110,11 @@ export default function Login() {
                     </button>
                     <button 
                          onClick={handleGoogleLogin}
-                         className="flex-1 py-2.5 border border-editorial-border rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-editorial-bg transition-all text-editorial-ink"
+                         disabled={isLoading}
+                         className={`flex-1 py-2.5 border border-editorial-border rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-editorial-bg transition-all text-editorial-ink ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                          <img src="https://www.google.com/favicon.ico" className="w-4 h-4" />
-                        Google
+                        {isLoading ? 'Connecting...' : 'Google'}
                     </button>
                 </div>
             </div>

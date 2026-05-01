@@ -3,124 +3,195 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { Check, ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Check, ArrowRight, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-
-const PLANS = [
-  {
-    name: "Standard",
-    price: "₹0",
-    description: "Try out the platform and share your draft.",
-    features: [
-        "1 Digital Invitation",
-        "Watermarked Preview",
-        "10 Guest Views",
-        "Standard Templates",
-        "Basic RSVP Tracking"
-    ],
-    buttonText: "Get Started",
-    accent: false
-  },
-  {
-    name: "Prime",
-    price: "₹999",
-    description: "Professional suite for the perfect digital union.",
-    features: [
-        "All Standard Features",
-        "Remove Watermarks",
-        "500 Guest Views",
-        "Premium Templates",
-        "Custom Location Maps",
-        "Gallery Image Hosting",
-        "Priority Support"
-    ],
-    buttonText: "Go Premium",
-    accent: true
-  },
-  {
-    name: "Luxury",
-    price: "₹2,499",
-    description: "High-end bespoke digital experience with full support.",
-    features: [
-        "All Prime Features",
-        "Unlimited Guest Views",
-        "Exclusive Royal Templates",
-        "Custom Domain Support",
-        "Wedding Countdown Timer",
-        "One-on-one consultation"
-    ],
-    buttonText: "Contact Sales",
-    accent: false
-  }
-];
+import { useState, useEffect } from "react";
+import { auth, authFetch } from "../lib/firebase";
+import toast from "react-hot-toast";
 
 export default function Pricing() {
+  const navigate = useNavigate();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    // Load Razorpay script
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const handlePayment = async () => {
+    if (!auth.currentUser) {
+      toast.error("Please login first to continue.");
+      navigate("/login");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      // 1. Get Config and Create Order on Backend
+      const [configRes, orderRes] = await Promise.all([
+        fetch("/api/config"),
+        authFetch("/api/create-order", {
+          method: "POST"
+        })
+      ]);
+
+      const config = await configRes.json();
+      const data = await orderRes.json();
+
+      if (!data.success) throw new Error(data.error);
+
+      const order = data.order;
+      const razorpayKeyId = config.razorpayKeyId;
+
+      if (!razorpayKeyId) {
+        throw new Error("Razorpay Key ID not configured on server.");
+      }
+
+      // 2. Open Razorpay Checkout
+      const options = {
+        key: razorpayKeyId,
+        amount: order.amount,
+        currency: order.currency,
+        name: "Wedding Invitations",
+        description: "One-time payment for premium invitation access",
+        order_id: order.id,
+        modal: {
+          ondismiss: () => {
+            setIsProcessing(false);
+          }
+        },
+        handler: async (response: any) => {
+          setIsProcessing(true); // Keep processing during verification
+          try {
+            const verifyRes = await authFetch("/api/verify-payment", {
+              method: "POST",
+              body: JSON.stringify({
+                ...response,
+                userId: auth.currentUser?.uid,
+                email: auth.currentUser?.email
+              }),
+            });
+            const verifyData = await verifyRes.json();
+ 
+            if (verifyData.success) {
+              toast.success("Payment successful! Redirecting...");
+              setTimeout(() => navigate("/builder"), 1500);
+            } else {
+              throw new Error(verifyData.error);
+            }
+          } catch (err: any) {
+            toast.error("Payment verification failed: " + err.message);
+            setIsProcessing(false);
+          }
+        },
+        prefill: {
+          email: auth.currentUser.email || "",
+          name: auth.currentUser.displayName || "",
+        },
+        theme: {
+          color: "#D4AF37",
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (error: any) {
+      console.error("Payment error:", error);
+      toast.error("Failed to initiate payment: " + error.message);
+      setIsProcessing(false);
+    }
+  };
+
   return (
-    <div className="py-24 px-6 lg:px-8 max-w-6xl mx-auto w-full">
+    <div className="py-24 px-6 lg:px-8 max-w-4xl mx-auto w-full">
       <div className="text-center mb-16">
-        <h1 className="text-5xl font-serif italic mb-4 leading-tight">Simple, transparent <span className="text-editorial-accent">pricing</span>.</h1>
-        <p className="text-editorial-secondary max-w-xl mx-auto">
-          Choose the plan that fits your wedding celebration. Upgrade at any time to unlock more features.
+        <motion.h1 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-5xl font-serif italic mb-6 leading-tight"
+        >
+          Unlock Your <span className="text-editorial-accent">Wedding Invitation</span>
+        </motion.h1>
+        <p className="text-editorial-secondary max-w-xl mx-auto text-lg leading-relaxed">
+          Create, customize, and share your perfect digital invitation with our premium tools and support.
         </p>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-8">
-        {PLANS.map((plan, i) => (
-          <motion.div
-            key={plan.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className={`editorial-card p-10 flex flex-col ${plan.accent ? 'border-editorial-accent ring-1 ring-editorial-accent' : ''}`}
-          >
-            <div className="mb-8">
-              <h3 className="font-serif italic text-2xl mb-1">{plan.name}</h3>
-              <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold text-editorial-ink">{plan.price}</span>
-                <span className="text-xs text-editorial-muted font-bold uppercase tracking-widest">/ one-time</span>
-              </div>
-              <p className="mt-4 text-sm text-editorial-secondary leading-relaxed">
-                {plan.description}
-              </p>
-            </div>
+      <div className="max-w-md mx-auto">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="editorial-card p-12 flex flex-col border-editorial-accent ring-1 ring-editorial-accent bg-white shadow-2xl relative"
+        >
+          <div className="absolute -top-4 right-8 bg-editorial-accent text-white px-4 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.2em] shadow-lg">
+            Best Value
+          </div>
 
-            <div className="flex-1 space-y-4 mb-10">
-              {plan.features.map((feature) => (
-                <div key={feature} className="flex items-start gap-3">
-                  <div className={`mt-0.5 shrink-0 w-4 h-4 rounded-full flex items-center justify-center ${plan.accent ? 'bg-editorial-accent text-white' : 'bg-editorial-bg text-editorial-muted'}`}>
-                    <Check className="w-2.5 h-2.5" />
-                  </div>
-                  <span className="text-sm text-editorial-ink">{feature}</span>
+          <div className="mb-10 text-center">
+            <h3 className="font-serif italic text-3xl mb-2">Premium Plan</h3>
+            <div className="flex items-baseline justify-center gap-2">
+              <span className="text-5xl font-bold text-editorial-ink">₹499</span>
+              <span className="text-sm text-editorial-muted font-bold uppercase tracking-widest">/ one-time</span>
+            </div>
+          </div>
+
+          <div className="space-y-6 mb-12">
+            {[
+              "Unlimited Edits & Updates",
+              "Permanent Shareable Link",
+              "Access to All Premium Templates",
+              "High-Resolution Gallery Hosting",
+              "Interactive RSVP & Guest List",
+              "Custom Map & Location Integration",
+              "No Watermarks or Ads"
+            ].map((feature) => (
+              <div key={feature} className="flex items-start gap-4">
+                <div className="mt-1 shrink-0 w-5 h-5 rounded-full bg-editorial-accent/10 flex items-center justify-center">
+                  <Check className="w-3 h-3 text-editorial-accent" />
                 </div>
-              ))}
-            </div>
+                <span className="text-editorial-ink font-medium">{feature}</span>
+              </div>
+            ))}
+          </div>
 
-            <Link 
-              to={plan.name === 'Luxury' ? '#' : '/'} 
-              className={`w-full py-3 rounded-full text-center text-xs font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
-                plan.accent 
-                  ? 'bg-editorial-accent text-white hover:bg-[#B37E4A]' 
-                  : 'bg-editorial-bg text-editorial-ink border border-editorial-border hover:bg-white'
-              }`}
-            >
-              <span>{plan.buttonText}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
-          </motion.div>
-        ))}
+          <button 
+            onClick={handlePayment}
+            disabled={isProcessing}
+            className="w-full editorial-button bg-editorial-ink text-white py-5 rounded-xl hover:bg-black transition-all flex items-center justify-center gap-3 group"
+          >
+            {isProcessing ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <span className="text-xs font-bold uppercase tracking-[0.3em]">Pay & Publish</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+          </button>
+
+          <p className="mt-8 text-center text-xs text-editorial-muted leading-relaxed italic">
+            Secure processing by Razorpay. No recurring charges.
+          </p>
+        </motion.div>
       </div>
 
-      <div className="mt-24 editorial-card p-12 bg-editorial-ink text-white flex flex-col md:flex-row items-center gap-12">
-          <div className="flex-1">
-             <h2 className="text-3xl font-serif italic mb-4">Have questions about our plans?</h2>
-             <p className="text-white/60 text-sm leading-relaxed max-w-md">
-                Our support team is available 24/7 to help you choose the best plan for your special day. Reach out to us anytime.
-             </p>
-          </div>
-          <button className="editorial-button bg-white text-editorial-ink hover:bg-white/90">
-             Talk to an Expert
-          </button>
+      <div className="mt-20 text-center">
+         <p className="text-editorial-muted text-sm italic font-serif">
+            "We were amazed at how beautiful our digital invite looked. Worth every penny!"
+         </p>
+         <div className="mt-4 flex justify-center gap-1">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="w-1.5 h-1.5 bg-editorial-accent rounded-full opacity-60"></div>
+            ))}
+         </div>
       </div>
     </div>
   );

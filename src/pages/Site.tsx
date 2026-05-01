@@ -7,8 +7,6 @@ import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Heart, Calendar, MapPin, Clock, Camera, MessageSquare, Gift, AlertCircle, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
-import { db } from "../lib/firebase";
-import { doc, getDoc, updateDoc, increment } from "firebase/firestore";
 import { WeddingInvite } from "../types";
 import { getTemplateById } from "../templates";
 
@@ -22,22 +20,16 @@ export default function Site() {
     async function fetchData() {
       if (!slug) return;
       try {
-        const docRef = doc(db, "invites", slug);
-        const docSnap = await getDoc(docRef);
+        const res = await fetch(`/api/get-invite?id=${slug}&increment=true`);
+        const result = await res.json();
         
-        if (docSnap.exists()) {
-          const inviteData = docSnap.data() as WeddingInvite;
-          setData(inviteData);
-          
-          // Increment views
-          await updateDoc(docRef, {
-            views: increment(1)
-          });
+        if (result.success && result.invite) {
+          setData(result.invite);
         } else {
           setError(true);
         }
       } catch (err) {
-        console.error(err);
+        console.error("Site fetch error:", err);
         setError(true);
       } finally {
         setLoading(false);
@@ -70,18 +62,16 @@ export default function Site() {
     return (
       <div className="min-h-screen bg-editorial-bg flex items-center justify-center p-8 text-center">
         <div className="max-w-md space-y-6">
-          <div className="w-16 h-16 bg-white border border-editorial-border rounded-full flex items-center justify-center mx-auto mb-8">
-            <AlertCircle className="w-8 h-8 text-red-400" />
+          <div className="w-16 h-16 bg-white border border-editorial-border rounded-full flex items-center justify-center mx-auto mb-8 shadow-sm">
+            <AlertCircle className="w-8 h-8 text-editorial-accent" />
           </div>
-          <h1 className="text-4xl font-serif italic mb-4">View Limit Reached</h1>
-          <p className="text-editorial-secondary leading-relaxed">
-            This digital invitation has exceeded its current viewing limit. 
-            If you are the owner, please upgrade your plan to restore access.
+          <h1 className="text-3xl font-serif italic mb-4">Invitation Expired</h1>
+          <p className="text-editorial-secondary leading-relaxed font-medium">
+            This invitation has expired. Contact the host.
           </p>
-          <div className="pt-8">
-            <Link to="/dashboard" className="editorial-button">
-              Upgrade Subscription
-            </Link>
+          <div className="pt-8 opacity-40">
+             <div className="h-px bg-editorial-border w-12 mx-auto mb-4" />
+             <p className="text-[10px] uppercase tracking-widest font-bold">Union Digital</p>
           </div>
         </div>
       </div>

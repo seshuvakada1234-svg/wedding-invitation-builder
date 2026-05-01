@@ -1,5 +1,15 @@
 {
   "entities": {
+    "user": {
+      "title": "User",
+      "description": "User profile and payment status",
+      "type": "object",
+      "properties": {
+        "paid": { "type": "boolean" },
+        "email": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
     "invite": {
       "title": "Wedding Invite",
       "description": "Details for a wedding invitation website",
@@ -49,6 +59,10 @@
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "user",
+      "description": "User profiles and payment state"
+    },
     "/invites/{inviteId}": {
       "schema": "invite",
       "description": "Collection of wedding invitation sites"

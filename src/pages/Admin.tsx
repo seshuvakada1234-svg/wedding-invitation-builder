@@ -5,8 +5,7 @@
 
 import { useState, useEffect } from "react";
 import { Search, Filter, ArrowUpDown, ChevronRight, Check, X, Loader2 } from "lucide-react";
-import { db, auth } from "../lib/firebase";
-import { collection, query, getDocs, orderBy, limit } from "firebase/firestore";
+import { auth, authFetch } from "../lib/firebase";
 import { WeddingInvite } from "../types";
 
 export default function Admin() {
@@ -16,18 +15,27 @@ export default function Admin() {
   useEffect(() => {
     async function fetchAllInvites() {
       try {
-        // This will fetch all if admin, or just own if not, due to rules
-        const q = query(collection(db, "invites"), orderBy("createdAt", "desc"), limit(50));
-        const querySnapshot = await getDocs(q);
-        const invitesData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WeddingInvite));
-        setInvites(invitesData);
+        const res = await authFetch("/api/admin/all-invites");
+        const data = await res.json();
+        if (data.success) {
+          setInvites(data.invites);
+        }
       } catch (err) {
         console.error("Error fetching invites:", err);
       } finally {
         setLoading(false);
       }
     }
-    fetchAllInvites();
+    
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        fetchAllInvites();
+      } else {
+        setLoading(false);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   if (loading) {
