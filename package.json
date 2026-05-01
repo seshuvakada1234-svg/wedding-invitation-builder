@@ -11,6 +11,7 @@
     "start": "node server.ts",
     "build": "vite build",
     "preview": "vite preview",
+    "vercel-build": "vite build",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
