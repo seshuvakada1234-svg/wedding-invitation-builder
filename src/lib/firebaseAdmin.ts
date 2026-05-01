@@ -18,15 +18,38 @@ function initializeAdmin() {
   const clean = (val: string | undefined) =>
     val?.trim().replace(/^["']|["']$/g, "");
 
+  // ── Path 1: Full JSON service account (most reliable) ──
+  const firebaseKey = process.env.FIREBASE_KEY;
+  if (firebaseKey) {
+    try {
+      const serviceAccount = JSON.parse(firebaseKey);
+      console.log("Firebase Admin: init with FIREBASE_KEY JSON...");
+      return admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: serviceAccount.project_id,
+      });
+    } catch (err: any) {
+      console.error("FIREBASE_KEY parse failed:", err.message);
+    }
+  }
+
+  // ── Path 2: Individual env vars (Vercel) ──
   const projectId = clean(process.env.FIREBASE_PROJECT_ID);
   const clientEmail = clean(process.env.FIREBASE_CLIENT_EMAIL);
   const privateKey = clean(process.env.FIREBASE_PRIVATE_KEY);
 
-  // ── Path 1: Full service account from env vars (production) ──
   if (projectId && clientEmail && privateKey) {
-    const formattedKey = privateKey.replace(/\\n/g, "\n");
+    const formattedKey = privateKey
+      .replace(/\\n/g, "\n")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .trim();
     try {
-      console.log("Firebase Admin: initializing with service account env vars...");
+      console.log("Firebase Admin: init with individual env vars...");
+      console.log("- projectId:", projectId);
+      console.log("- clientEmail:", clientEmail);
+      console.log("- privateKey starts:", formattedKey.substring(0, 40));
+      console.log("- privateKey newlines:", (formattedKey.match(/\n/g) || []).length);
       return admin.initializeApp({
         credential: admin.credential.cert({
           projectId,
@@ -37,15 +60,14 @@ function initializeAdmin() {
       });
     } catch (err: any) {
       console.error("Firebase Admin env init failed:", err.message);
-      // fall through to next path
     }
   }
 
-  // ── Path 2: Service account JSON file (local dev) ──
+  // ── Path 3: service-account.json file (local dev) ──
   const serviceAccountPath = path.join(process.cwd(), "service-account.json");
   if (fs.existsSync(serviceAccountPath)) {
     try {
-      console.log("Firebase Admin: initializing with service-account.json...");
+      console.log("Firebase Admin: init with service-account.json...");
       const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf-8"));
       return admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
@@ -56,15 +78,13 @@ function initializeAdmin() {
     }
   }
 
-  // ── Path 3: firebase-applet-config.json — READ credentials from it ──
+  // ── Path 4: firebase-applet-config.json (AI Studio) ──
   const appletConfigPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (fs.existsSync(appletConfigPath)) {
     try {
       const config = JSON.parse(fs.readFileSync(appletConfigPath, "utf-8"));
-
-      // If applet config has full service account fields, use them
       if (config.client_email && config.private_key) {
-        console.log("Firebase Admin: initializing with firebase-applet-config.json credentials...");
+        console.log("Firebase Admin: init with firebase-applet-config.json credentials...");
         return admin.initializeApp({
           credential: admin.credential.cert({
             projectId: config.project_id || config.projectId,
@@ -74,13 +94,9 @@ function initializeAdmin() {
           projectId: config.project_id || config.projectId,
         });
       }
-
-      // ⚠️ projectId-only fallback — token verification will NOT work
-      // Only safe for Firestore reads in Firebase Studio emulator context
       console.warn(
         "Firebase Admin: firebase-applet-config.json has no credentials. " +
-        "Token verification (adminAuth.verifyIdToken) will fail. " +
-        "Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY to your .env"
+        "verifyIdToken() will fail. Add FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY."
       );
       return admin.initializeApp({
         projectId: config.projectId,
@@ -98,27 +114,38 @@ function initializeAdmin() {
 
 const adminApp = initializeAdmin();
 
-// ── Firestore ────────────────────────────────────────────────────────────────
+// ── Firestore Database ID ────────────────────────────────────────────────────
 
 function getDbId(): string | null {
+  // ✅ Check env var first — works on Vercel
+  if (process.env.FIRESTORE_DATABASE_ID) {
+    console.log("Firestore: using FIRESTORE_DATABASE_ID env var:", process.env.FIRESTORE_DATABASE_ID);
+    return process.env.FIRESTORE_DATABASE_ID;
+  }
+
+  // ✅ Fallback to firebase-applet-config.json — works on AI Studio
   try {
     const configPath = path.join(process.cwd(), "firebase-applet-config.json");
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-      return config?.firestoreDatabaseId || null;
+      if (config?.firestoreDatabaseId) {
+        console.log("Firestore: using firestoreDatabaseId from config:", config.firestoreDatabaseId);
+        return config.firestoreDatabaseId;
+      }
     }
   } catch {
     console.warn("Could not read firebase-applet-config.json for DB ID");
   }
+
   return null;
 }
 
 const dbId = getDbId();
 
 if (dbId && dbId !== "(default)") {
-  console.log("Firestore: using database ID:", dbId);
+  console.log("Firestore: connecting to database:", dbId);
 } else {
-  console.log("Firestore: using default database");
+  console.log("Firestore: connecting to (default) database");
 }
 
 export const adminDb =
