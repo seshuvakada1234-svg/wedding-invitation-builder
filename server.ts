@@ -10,8 +10,8 @@ dotenv.config();
 
 import cors from "cors";
 import admin from "firebase-admin";
-import { adminAuth, adminDb } from "./src/lib/firebaseAdmin";
-import { verifyUser } from "./src/lib/auth";
+import { adminAuth, adminDb } from "./src/lib/firebaseAdmin.js";
+import { verifyUser } from "./src/lib/auth.js";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 

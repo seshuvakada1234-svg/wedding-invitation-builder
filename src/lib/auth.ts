@@ -1,4 +1,4 @@
-import { adminAuth } from "./firebaseAdmin";
+import { adminAuth } from "./firebaseAdmin.js";
 import express from "express";
 
 export interface AuthenticatedRequest extends express.Request {
