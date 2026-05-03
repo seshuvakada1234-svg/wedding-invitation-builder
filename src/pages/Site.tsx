@@ -12,17 +12,20 @@ import { getTemplateById } from "../templates";
 
 export default function Site() {
   const { slug } = useParams();
+  const id = slug; // Gets the id from useParams()
   const [data, setData] = useState<WeddingInvite | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
-      if (!slug) return;
+      if (!id) return;
       try {
-        const res = await fetch(`/api/get-invite?id=${slug}&increment=true`);
+        // Calls fetch(/api/get-invite?id=${id}&increment=true)
+        const res = await fetch(`/api/get-invite?id=${id}&increment=true`);
         const result = await res.json();
         
+        // Gets result.invite from the response
         if (result.success && result.invite) {
           setData(result.invite);
         } else {
@@ -36,7 +39,7 @@ export default function Site() {
       }
     }
     fetchData();
-  }, [slug]);
+  }, [id]);
 
   if (loading) {
     return (
@@ -49,7 +52,7 @@ export default function Site() {
   if (error || !data) {
     return (
       <div className="min-h-screen bg-editorial-bg flex flex-col items-center justify-center p-8 text-center">
-        <h1 className="text-4xl font-serif italic mb-4">404 — Not Found</h1>
+        <h1 className="text-4xl font-serif italic mb-4">Invitation not found</h1>
         <p className="text-editorial-secondary mb-8">This digital union has moved or does not exist.</p>
         <Link to="/" className="editorial-button">Explore Templates</Link>
       </div>
@@ -129,10 +132,23 @@ export default function Site() {
           groomName={data.groomName || ""}
           date={data.weddingDate || ""}
           venue={data.location || ""}
+          venueAddress={data.venueAddress}
+          venueCity={data.venueCity}
           googleMapsLink={data.googleMapsLink}
+          coordinates={data.coordinates}
+          story={data.story}
+          enable3D={data.enable3D}
+          enableEnvelope={data.enableEnvelope}
           coverImage={data.coverImage}
           events={data.events || []}
           galleryImages={data.galleryImages || []}
+          deity={data.deity}
+          eventName={data.eventName}
+          muhurtham={data.muhurtham}
+          family={data.family}
+          hosts={data.family}
+          address={data.venueAddress}
+          image={data.coverImage}
         />
       ) : (
         <div className="p-20 text-center">Template Support Error</div>
