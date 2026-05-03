@@ -130,6 +130,7 @@ export default function Site() {
           venue={invite.location || ""}
           venueAddress={invite.venueAddress}
           venueCity={invite.venueCity}
+          googleMapsEmbedUrl={invite.googleMapsLink}
           googleMapsLink={invite.googleMapsLink}
           coordinates={invite.coordinates}
           story={invite.story}
@@ -142,8 +143,11 @@ export default function Site() {
           eventName={invite.eventName}
           muhurtham={invite.muhurtham}
           family={invite.family}
-          hosts={invite.family}
-          address={invite.venueAddress}
+          hosts={{
+            primary: invite.brideName || "",
+            secondary: invite.groomName || "",
+          }}
+          address={invite.venueAddress || invite.location}
           image={invite.coverImage}
         />
       ) : (

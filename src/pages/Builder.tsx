@@ -138,6 +138,7 @@ export default function Builder() {
 
   // ── UI state ────────────────────────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showPricingModal, setShowPricingModal] = useState(false);
@@ -342,6 +343,59 @@ export default function Builder() {
   };
 
   // ─── CORE FIX: handleSave ────────────────────────────────────────────────────
+  const handleSaveDraft = async () => {
+    if (!currentUser) {
+      toast.error("Please log in first to save a draft.");
+      navigate("/login");
+      return;
+    }
+
+    setIsSavingDraft(true);
+
+    try {
+      const token = await currentUser.getIdToken();
+      
+      const id = isEditMode
+        ? inviteId || formData.slug || siteSlug
+        : Math.random().toString(36).substring(2, 10);
+
+      const inviteData: Partial<WeddingInvite> = {
+        ...formData,
+        id,
+        userId: currentUser.uid,
+        userName: currentUser.displayName || "User",
+        email: currentUser.email || "",
+        slug: id,
+        published: false,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const saveRes = await fetch("/api/save-draft", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, ...inviteData }),
+      });
+
+      if (!saveRes.ok) {
+        const errText = await saveRes.text();
+        throw new Error(errText || "Failed to save draft");
+      }
+
+      toast.success("Draft saved!");
+      if (!isEditMode) {
+        navigate(`/builder/edit/${id}`, { replace: true });
+      }
+    } catch (error: any) {
+      console.error("Draft save error:", error);
+      toast.error(error.message || "An error occurred while saving draft.");
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
   const handleSave = async (forceSaveAfterPayment = false) => {
     // FIX 1: use currentUser from state — guaranteed to be set after auth resolves.
     if (!currentUser) {
@@ -1085,6 +1139,19 @@ export default function Builder() {
               </button>
 
               <div className="h-4 w-px bg-editorial-border mx-2" />
+              
+              <button
+                onClick={handleSaveDraft}
+                disabled={isSavingDraft}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all bg-white border border-editorial-border text-editorial-ink hover:bg-editorial-bg disabled:opacity-60"
+              >
+                {isSavingDraft ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>{isSavingDraft ? "Saving..." : "Save Draft"}</span>
+              </button>
 
               <button
                 onClick={handleSave}

@@ -102,6 +102,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true, invite: { id: inviteDoc.id, ...serializeFirestoreData(inviteDoc.data() || {}) } });
     }
 
+    // ── POST /api/save-draft ──
+    if (path === "/api/save-draft" && method === "POST") {
+      const tokenUserId = await verifyUser(req as any);
+      const { id, ...data } = req.body;
+      if (!id) return res.status(400).json({ success: false, error: "ID required" });
+      await adminDb.collection("invites").doc(id).set(
+        { ...data, userId: tokenUserId, slug: id, published: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+        { merge: true }
+      );
+      return res.json({ success: true });
+    }
+
     // ── POST /api/save-invite ──
     if (path === "/api/save-invite" && method === "POST") {
       const tokenUserId = await verifyUser(req as any);
