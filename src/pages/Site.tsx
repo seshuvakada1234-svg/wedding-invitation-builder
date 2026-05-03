@@ -13,32 +13,28 @@ import { getTemplateById } from "../templates";
 export default function Site() {
   const { slug } = useParams();
   const id = slug; // Gets the id from useParams()
-  const [data, setData] = useState<WeddingInvite | null>(null);
+  const [invite, setInvite] = useState<WeddingInvite | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchData() {
-      if (!id) return;
+    async function loadInvite() {
       try {
-        // Calls fetch(/api/get-invite?id=${id}&increment=true)
+        setLoading(true);
         const res = await fetch(`/api/get-invite?id=${id}&increment=true`);
         const result = await res.json();
-        
-        // Gets result.invite from the response
         if (result.success && result.invite) {
-          setData(result.invite);
+          setInvite(result.invite);
         } else {
-          setError(true);
+          setError("Invitation not found");
         }
       } catch (err) {
-        console.error("Site fetch error:", err);
-        setError(true);
+        setError("Failed to load invitation");
       } finally {
         setLoading(false);
       }
     }
-    fetchData();
+    if (id) loadInvite();
   }, [id]);
 
   if (loading) {
@@ -49,17 +45,17 @@ export default function Site() {
     );
   }
 
-  if (error || !data) {
+  if (error || !invite) {
     return (
       <div className="min-h-screen bg-editorial-bg flex flex-col items-center justify-center p-8 text-center">
-        <h1 className="text-4xl font-serif italic mb-4">Invitation not found</h1>
+        <h1 className="text-4xl font-serif italic mb-4">{error || "Invitation not found"}</h1>
         <p className="text-editorial-secondary mb-8">This digital union has moved or does not exist.</p>
         <Link to="/" className="editorial-button">Explore Templates</Link>
       </div>
     );
   }
 
-  const isLimitReached = data.views >= data.viewLimit;
+  const isLimitReached = invite.views >= invite.viewLimit;
 
   if (isLimitReached) {
     return (
@@ -81,13 +77,13 @@ export default function Site() {
     );
   }
 
-  const templateId = data.template || 'minimal';
+  const templateId = invite.template || 'minimal';
   const templateConfig = getTemplateById(templateId as any);
 
   // Update document title for SEO
   useEffect(() => {
-    if (data) {
-      const title = `${data.groomName} & ${data.brideName}'s Wedding Invitation`;
+    if (invite) {
+      const title = `${invite.groomName} & ${invite.brideName}'s Wedding Invitation`;
       document.title = title;
       
       // Update meta tags for social sharing
@@ -102,18 +98,18 @@ export default function Site() {
       };
 
       setMeta('og:title', title);
-      setMeta('og:description', `You are cordially invited to the wedding of ${data.groomName} and ${data.brideName} on ${data.weddingDate}.`);
-      if (data.coverImage) {
-        setMeta('og:image', data.coverImage);
+      setMeta('og:description', `You are cordially invited to the wedding of ${invite.groomName} and ${invite.brideName} on ${invite.weddingDate}.`);
+      if (invite.coverImage) {
+        setMeta('og:image', invite.coverImage);
       }
       setMeta('og:type', 'website');
     }
-  }, [data]);
+  }, [invite]);
 
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Watermark Overlay (Unpaid State) */}
-      {!data.isPaid && (
+      {!invite.isPaid && (
         <div className="fixed inset-0 bg-editorial-ink/[0.03] backdrop-blur-[0.5px] pointer-events-none z-[100] flex items-center justify-center">
           <div className="rotate-[-25deg] border-[10px] border-editorial-ink/10 text-editorial-ink/5 p-12 text-center">
              <div className="text-8xl md:text-[12rem] font-black uppercase tracking-[0.2em] select-none">
@@ -128,27 +124,27 @@ export default function Site() {
 
       {templateConfig?.component ? (
         <templateConfig.component 
-          brideName={data.brideName || ""}
-          groomName={data.groomName || ""}
-          date={data.weddingDate || ""}
-          venue={data.location || ""}
-          venueAddress={data.venueAddress}
-          venueCity={data.venueCity}
-          googleMapsLink={data.googleMapsLink}
-          coordinates={data.coordinates}
-          story={data.story}
-          enable3D={data.enable3D}
-          enableEnvelope={data.enableEnvelope}
-          coverImage={data.coverImage}
-          events={data.events || []}
-          galleryImages={data.galleryImages || []}
-          deity={data.deity}
-          eventName={data.eventName}
-          muhurtham={data.muhurtham}
-          family={data.family}
-          hosts={data.family}
-          address={data.venueAddress}
-          image={data.coverImage}
+          brideName={invite.brideName || ""}
+          groomName={invite.groomName || ""}
+          date={invite.weddingDate || ""}
+          venue={invite.location || ""}
+          venueAddress={invite.venueAddress}
+          venueCity={invite.venueCity}
+          googleMapsLink={invite.googleMapsLink}
+          coordinates={invite.coordinates}
+          story={invite.story}
+          enable3D={invite.enable3D}
+          enableEnvelope={invite.enableEnvelope}
+          coverImage={invite.coverImage}
+          events={invite.events || []}
+          galleryImages={invite.galleryImages || []}
+          deity={invite.deity}
+          eventName={invite.eventName}
+          muhurtham={invite.muhurtham}
+          family={invite.family}
+          hosts={invite.family}
+          address={invite.venueAddress}
+          image={invite.coverImage}
         />
       ) : (
         <div className="p-20 text-center">Template Support Error</div>
