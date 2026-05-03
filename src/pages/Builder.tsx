@@ -524,16 +524,18 @@ export default function Builder() {
     setIsProcessingPayment(true);
 
     try {
-      const resScript = await loadRazorpay();
-      if (!resScript) {
-        toast.error("Razorpay SDK failed to load. Are you online?");
-        setIsProcessingPayment(false);
-        return;
+      // 1. Get Config (Key ID)
+      const configRes = await fetch("/api/config");
+      const configData = await configRes.json();
+      const razorpayKeyId = configData.razorpayKeyId;
+
+      if (!razorpayKeyId) {
+        throw new Error("Razorpay key not found in configuration");
       }
 
       const token = await currentUser.getIdToken();
       
-      // 1. Create Order
+      // 2. Create Order
       const orderRes = await fetch("/api/create-order", {
         method: "POST",
         headers: { 
@@ -547,64 +549,60 @@ export default function Builder() {
         throw new Error(orderData.error || "Order creation failed");
       }
 
-      // 2. Get Config (Key ID)
-      const configRes = await fetch("/api/config");
-      const configData = await configRes.json();
+      const order = orderData.order;
 
       const options = {
-        key: configData.razorpayKeyId,
-        amount: orderData.order.amount,
-        currency: orderData.order.currency,
+        key: razorpayKeyId,
+        amount: 99900,
+        currency: "INR",
         name: "Union Digital",
-        description: "Wedding Invitation Premium",
-        order_id: orderData.order.id,
-        handler: async (response: any) => {
+        description: "Publish Your Invitation",
+        order_id: order.id,
+        handler: async function(response: any) {
           try {
-            // 3. Verify Payment
+            // 3. Verify payment
             const verifyRes = await fetch("/api/verify-payment", {
               method: "POST",
               headers: { 
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`
+                "Authorization": `Bearer ${token}`, 
+                "Content-Type": "application/json" 
               },
               body: JSON.stringify({
-                ...response,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
                 userId: currentUser.uid,
                 email: currentUser.email,
-              }),
+              })
             });
             const verifyData = await verifyRes.json();
-
+            
             if (verifyData.success) {
               setShowPricingModal(false);
-              // 4. Save and show success modal
+              // now save the invite
               await handleSave(true);
+              // Success modal is shown by handleSave(true)
             } else {
-              toast.error("Payment verification failed.");
+              toast.error("Payment verification failed. Please contact support.");
             }
           } catch (err) {
-            console.error(err);
-            toast.error("Payment verification error.");
+            console.error("Verification error:", err);
+            toast.error("An error occurred while verifying your payment.");
           } finally {
             setIsProcessingPayment(false);
           }
         },
         prefill: {
-          name: currentUser.displayName || "",
-          email: currentUser.email || "",
+          email: currentUser?.email || "",
+          name: currentUser?.displayName || "",
         },
-        theme: { color: "#C48B58" },
-        modal: {
-          ondismiss: () => {
-             setIsProcessingPayment(false);
-          }
-        }
+        theme: { color: "#000000" }
       };
 
-      const paymentObject = new (window as any).Razorpay(options);
-      paymentObject.open();
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
     } catch (error: any) {
-      console.error(error);
+      console.error("Payment initialization error:", error);
       toast.error(error.message || "Payment initiation failed");
       setIsProcessingPayment(false);
     }

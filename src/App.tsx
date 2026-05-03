@@ -42,9 +42,9 @@ export default function App() {
         </Route>
 
         {/* Live Site Routes (No shared layout) */}
-        <Route path="/invite/:slug" element={<Site />} />
-        <Route path="/site/:slug" element={<Site />} />
-        <Route path="/wedding/:slug" element={<Site />} />
+        <Route path="/invite/:id" element={<Site />} />
+        <Route path="/site/:id" element={<Site />} />
+        <Route path="/wedding/:id" element={<Site />} />
 
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" replace />} />
