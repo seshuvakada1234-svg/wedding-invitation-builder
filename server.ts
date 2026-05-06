@@ -18,6 +18,8 @@ import crypto from "crypto";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+import multer from "multer";
+
 // ─── Auth Token Verification (Helper already in src/lib/auth.ts) ────────────
 
 function getAdminDb() {
@@ -107,25 +109,72 @@ function serializeFirestoreData(data: Record<string, any>) {
 
 // ─── Server ──────────────────────────────────────────────────────────────────
 
+// ─── Multer Init ────────────────────────────────────────────────────────────
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  storage: multer.memoryStorage(),
+});
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(cors());
 
+  // Logging middleware
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
   });
 
-  // JSON body parser — skip for multipart upload
-  app.use((req, res, next) => {
-    const isUpload =
-      (req.path === "/api/upload" || req.url.startsWith("/api/upload?")) &&
-      req.method === "POST";
-    if (isUpload) return next();
-    express.json({ limit: "10mb" })(req, res, next);
+  // ── Upload handler (BEFORE other body parsers) ─────────────────────────────
+  app.post("/api/upload", upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      const { userId, inviteId } = req.body;
+
+      if (!file) {
+        return res.status(400).json({ success: false, error: "No file uploaded" });
+      }
+
+      if (!userId || !inviteId) {
+        return res.status(400).json({ success: false, error: "userId and inviteId are required" });
+      }
+
+      const client = getR2Client();
+      const timestamp = Date.now();
+      const sanitizedFileName = file.originalname.replace(/[^a-z0-9.]/gi, "_").toLowerCase();
+      const fileName = `users/${userId}/${inviteId}/${timestamp}-${sanitizedFileName}`;
+
+      const bucketName = process.env.R2_BUCKET;
+      const publicUrl = process.env.R2_PUBLIC_URL;
+
+      if (!bucketName) throw new Error("Missing R2_BUCKET configuration.");
+
+      await client.send(
+        new PutObjectCommand({
+          Bucket: bucketName,
+          Key: fileName,
+          Body: file.buffer,
+          ContentType: file.mimetype || "image/jpeg",
+        })
+      );
+      const url = publicUrl
+        ? `${publicUrl.endsWith("/") ? publicUrl.slice(0, -1) : publicUrl}/${fileName}`
+        : `${process.env.R2_ENDPOINT}/${bucketName}/${fileName}`;
+
+      return res.json({ success: true, url, key: fileName });
+    } catch (error: any) {
+      console.error("DEBUG: Upload failed:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "Internal Server Error",
+      });
+    }
   });
+
+  // JSON body parser — skip for already handled upload
+  app.use(express.json({ limit: "10mb" }));
 
     // ── Get User Invites ──────────────────────────────────────────────────────
     app.get("/api/get-invites", async (req, res) => {
@@ -285,80 +334,6 @@ async function startServer() {
       res.status(500).json({
         success: false,
         error: error instanceof Error ? error.message : "Internal Server Error",
-      });
-    }
-  });
-
-  // ── Upload ─────────────────────────────────────────────────────────────────
-  app.post("/api/upload", async (req, res) => {
-    console.log("Processing upload request...");
-    try {
-      const form = formidable({ maxFileSize: 5 * 1024 * 1024 });
-      const [fields, files] = await form.parse(req);
-      const client = getR2Client();
-
-      const file = Array.isArray(files.file) ? files.file[0] : files.file;
-      if (!file) {
-        return res.status(400).json({ success: false, error: "No file uploaded" });
-      }
-
-      const userId = Array.isArray(fields.userId) ? fields.userId[0] : (fields.userId as string);
-      const inviteId = Array.isArray(fields.inviteId) ? fields.inviteId[0] : (fields.inviteId as string);
-
-      if (!userId || !inviteId) {
-        return res.status(400).json({ success: false, error: "userId and inviteId are required" });
-      }
-
-      const timestamp = Date.now();
-      const originalName = file.originalFilename || "image.jpg";
-      const sanitizedFileName = originalName.replace(/[^a-z0-9.]/gi, "_").toLowerCase();
-      const fileName = `users/${userId}/${inviteId}/${timestamp}-${sanitizedFileName}`;
-
-      const bucketName = process.env.R2_BUCKET;
-      const publicUrl = process.env.R2_PUBLIC_URL;
-
-      if (!bucketName) throw new Error("Missing R2_BUCKET configuration.");
-
-      const fileContent = fs.readFileSync(file.filepath);
-
-      await client.send(
-        new PutObjectCommand({
-          Bucket: bucketName,
-          Key: fileName,
-          Body: fileContent,
-          ContentType: file.mimetype || "image/jpeg",
-        })
-      );
-
-      const url = publicUrl
-        ? `${publicUrl.endsWith("/") ? publicUrl.slice(0, -1) : publicUrl}/${fileName}`
-        : `${process.env.R2_ENDPOINT}/${bucketName}/${fileName}`;
-
-      console.log("Upload successful:", url);
-      return res.json({ success: true, url, key: fileName });
-    } catch (error: any) {
-      console.error("DEBUG: Upload failed with error:", error);
-      
-      // Handle known S3/R2 error cases
-      let errorMessage = error.message || "Internal Server Error";
-      let statusCode = 500;
-
-      if (error.Code === "EntityTooLarge") {
-        errorMessage = "File is too large";
-        statusCode = 413;
-      } else if (error.name === "CredentialsError") {
-        errorMessage = "Cloud storage credentials error";
-        statusCode = 500;
-      }
-
-      // Ensure status is valid for express
-      const finalStatus = typeof error.status === 'number' && error.status >= 100 && error.status < 600 
-        ? error.status 
-        : statusCode;
-
-      return res.status(finalStatus).json({
-        success: false,
-        error: errorMessage,
       });
     }
   });

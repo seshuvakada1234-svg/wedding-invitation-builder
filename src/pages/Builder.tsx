@@ -279,12 +279,19 @@ export default function Builder() {
 
     if (!res.ok) {
       const text = await res.text();
-      let errorMessage = "Upload failed";
+      console.error("Upload response error text:", text);
+      let errorMessage = `Upload failed (${res.status})`;
       try {
         const errorData = JSON.parse(text);
         errorMessage = errorData.error || errorMessage;
-      } catch {
-        errorMessage = text || errorMessage;
+      } catch (e) {
+        // If not JSON, use a snippet of the text if it looks like an error message
+        if (text.length > 0 && text.length < 200) {
+          errorMessage = text;
+        } else if (text.includes("<title>")) {
+          const titleMatch = text.match(/<title>(.*?)<\/title>/);
+          if (titleMatch) errorMessage = `Server Error: ${titleMatch[1]}`;
+        }
       }
       throw new Error(errorMessage);
     }
