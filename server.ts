@@ -244,19 +244,34 @@ async function startServer() {
 
       // ✅ Use verified token userId, not body userId
       const userDoc = await db.collection("users").doc(tokenUserId).get();
-      const isUserPaid = userDoc.exists && userDoc.data()?.paid === true;
+      const userData = userDoc.data() || {};
+      
+      const template = (req.body.template || data.template || "minimal").toString().trim();
+      const normalizedTemplate = template.toLowerCase();
+
+      // ✅ Payment gate — block save if not paid for this template
+      const isUserPaid = userData.paid === true || 
+        (userData.paidTemplates && (
+          userData.paidTemplates[template] === true || 
+          userData.paidTemplates[normalizedTemplate] === true
+        )) ||
+        userData[`paidTemplates.${template}`] === true ||
+        userData[`paidTemplates.${normalizedTemplate}`] === true;
 
       // ✅ Payment gate — block save if not paid
       if (!isUserPaid) {
+        console.error(`Payment check: Fail in server.ts. User: ${tokenUserId}, Template: ${template}, Normalized: ${normalizedTemplate}, PaidTemplates:`, userData.paidTemplates);
         return res.status(402).json({
           success: false,
           error: "paymentRequired",
+          details: { template, userId: tokenUserId },
           redirect: "/pricing",
         });
       }
 
       const inviteData = {
         ...data,
+        template,
         userId: tokenUserId,
         isPaid: true,
         slug: id, // Ensure slug is same as id if not provided
@@ -390,10 +405,11 @@ async function startServer() {
         return res.json({ 
           success: true, 
           paid: data.paid || false,
+          paidTemplates: data.paidTemplates || {},
           email: data.email || null 
         });
       }
-      res.json({ success: true, paid: false });
+      res.json({ success: true, paid: false, paidTemplates: {} });
     } catch (error: any) {
       console.error("Check user error:", error);
       res.status(500).json({ success: false, error: error.message });
@@ -441,6 +457,7 @@ async function startServer() {
   app.post("/api/create-order", async (req, res) => {
     try {
       console.log("POST /api/create-order received");
+      const { templateId } = req.body;
       const rp = getRazorpay();
       if (!rp) {
         return res.status(500).json({
@@ -449,14 +466,27 @@ async function startServer() {
         });
       }
 
+      const TEMPLATE_PRICES: Record<string, number> = {
+        "minimal": 49900,
+        "housewarming-south": 79900,
+        "kerala-wedding": 79900,
+        "konaseema": 99900,
+        "kerala-envelope-reveal": 129900,
+        "royal-wedding": 149900,
+        "all_access": 199900,
+      };
+      
+      // Default to 49900 (₹499) if no templateId provided (matches Pricing.tsx base plan)
+      const amount = TEMPLATE_PRICES[templateId] || 49900;
+
       const order = await rp.orders.create({
-        amount: 99900, // ₹999.00
+        amount,
         currency: "INR",
         receipt: `receipt_${Date.now()}`,
       });
 
-      console.log("Order created:", order.id);
-      res.json({ success: true, order });
+      console.log("Order created:", order.id, "for template:", templateId);
+      res.json({ success: true, order, amount, templateId });
     } catch (error: any) {
       console.error("Create order error:", error.message || error);
 
@@ -485,6 +515,7 @@ async function startServer() {
         razorpay_signature,
         userId,
         email,
+        templateId
       } = req.body;
 
       // 1. Authenticate user
@@ -518,17 +549,37 @@ async function startServer() {
 
       const db = getAdminDb();
       if (db) {
-        await db.collection("users").doc(confirmedUserId).set(
-          {
-            paid: true,
-            email: email || null,
-            paymentId: razorpay_payment_id,
-            orderId: razorpay_order_id,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          },
-          { merge: true }
-        );
-        console.log("Payment verified and saved for user:", confirmedUserId);
+        const userRef = db.collection("users").doc(confirmedUserId);
+        
+        // Ensure user exists first
+        await userRef.set({
+          email: email || null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        const updateData: any = {
+          paymentId: razorpay_payment_id,
+          orderId: razorpay_order_id,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        if (templateId) {
+          const normId = templateId.toString().toLowerCase().trim();
+          updateData[`paidTemplates.${normId}`] = true;
+          // Also set the original just in case
+          if (normId !== templateId) {
+            updateData[`paidTemplates.${templateId}`] = true;
+          }
+
+          if (normId === "minimal" || normId === "all_access" || normId === "premium") {
+            updateData.paid = true;
+          }
+        } else {
+          updateData.paid = true;
+        }
+
+        await userRef.update(updateData);
+        console.log("Payment verified and saved for user:", confirmedUserId, "Template:", templateId);
       }
 
       res.json({ success: true });

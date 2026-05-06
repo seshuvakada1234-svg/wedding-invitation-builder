@@ -36,24 +36,23 @@ export default function Pricing() {
     setIsProcessing(true);
     try {
       // 1. Get Config and Create Order on Backend
-      const [configRes, orderRes] = await Promise.all([
-        fetch("/api/config"),
-        authFetch("/api/create-order", {
-          method: "POST"
-        })
-      ]);
-
+      const configRes = await fetch("/api/config");
       const config = await configRes.json();
-      const data = await orderRes.json();
-
-      if (!data.success) throw new Error(data.error);
-
-      const order = data.order;
       const razorpayKeyId = config.razorpayKeyId;
 
       if (!razorpayKeyId) {
         throw new Error("Razorpay Key ID not configured on server.");
       }
+
+      const orderRes = await authFetch("/api/create-order", {
+        method: "POST",
+        body: JSON.stringify({ templateId: "minimal" }) // Default to minimal tier for the 499 plan
+      });
+
+      const data = await orderRes.json();
+      if (!data.success) throw new Error(data.error || "Failed to create order");
+
+      const order = data.order;
 
       // 2. Open Razorpay Checkout
       const options = {
@@ -76,7 +75,8 @@ export default function Pricing() {
               body: JSON.stringify({
                 ...response,
                 userId: auth.currentUser?.uid,
-                email: auth.currentUser?.email
+                email: auth.currentUser?.email,
+                templateId: "minimal"
               }),
             });
             const verifyData = await verifyRes.json();

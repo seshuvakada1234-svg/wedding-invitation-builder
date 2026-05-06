@@ -4,12 +4,34 @@
  */
 
 import { Outlet, Link, useNavigate } from "react-router-dom";
-import { Heart, LayoutDashboard, Settings, User } from "lucide-react";
+import { Heart, User, LogOut } from "lucide-react";
+import { useState, useEffect } from "react";
+import { auth, logout } from "../lib/firebase";
+import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import toast from "react-hot-toast";
 
 export default function Layout() {
   const navigate = useNavigate();
-  // Mock auth state for initial UI construction
-  const user = { email: "user@example.com" }; 
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success("Signed out successfully");
+      navigate("/");
+    } catch (error: any) {
+      toast.error("Error signing out");
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col font-sans">
@@ -43,11 +65,19 @@ export default function Layout() {
                 <button 
                   onClick={() => navigate('/dashboard')}
                   className="w-8 h-8 rounded-full bg-editorial-bg flex items-center justify-center border border-editorial-border hover:border-editorial-accent transition-colors"
+                  title="Dashboard"
                 >
                   <User className="w-4 h-4 text-editorial-secondary" />
                 </button>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 text-editorial-secondary hover:text-editorial-accent transition-colors"
+                  title="Logout"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
               </div>
-            ) : (
+            ) : !loading && (
               <Link to="/login" className="editorial-button">
                 Sign In
               </Link>

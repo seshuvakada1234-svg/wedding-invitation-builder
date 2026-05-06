@@ -66,6 +66,24 @@ const GALLERY_DEFAULTS: Record<string, string[]> = {
   ],
 };
 
+const TEMPLATE_PRICES: Record<string, number> = {
+  "minimal": 499,
+  "housewarming-south": 799,
+  "kerala-wedding": 799,
+  "konaseema": 999,
+  "kerala-envelope-reveal": 1299,
+  "royal-wedding": 1499,
+};
+
+const TEMPLATE_PRICE_PAISE: Record<string, number> = {
+  "minimal": 49900,
+  "housewarming-south": 79900,
+  "kerala-wedding": 79900,
+  "konaseema": 99900,
+  "kerala-envelope-reveal": 129900,
+  "royal-wedding": 149900,
+};
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Builder() {
@@ -138,6 +156,7 @@ export default function Builder() {
 
   // ── UI state ────────────────────────────────────────────────────────────────
   const [isSaving, setIsSaving] = useState(false);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
@@ -397,17 +416,21 @@ export default function Builder() {
   };
 
   const handleSave = async (forceSaveAfterPayment = false) => {
-    // FIX 1: use currentUser from state — guaranteed to be set after auth resolves.
     if (!currentUser) {
       toast.error("Please log in first to publish your invitation.");
       navigate("/login");
       return;
     }
 
+    if (isSaving || isCheckingPayment) return;
+    if (showPricingModal && !forceSaveAfterPayment) return;
+
     setIsSaving(true);
+    if (!forceSaveAfterPayment) {
+      setIsCheckingPayment(true);
+    }
 
     try {
-      // FIX 2: Get a fresh token explicitly before the first API call.
       let token: string;
       try {
         token = await currentUser.getIdToken();
@@ -422,7 +445,6 @@ export default function Builder() {
         return;
       }
 
-      // Check payment status if not already forced by successful payment callback
       if (!forceSaveAfterPayment) {
         const checkRes = await fetch("/api/check-user", {
           headers: {
@@ -442,19 +464,25 @@ export default function Builder() {
         }
 
         const userData = await checkRes.json();
+        const currentTemplate = (formData.template || "minimal") as string;
+        const normalizedTemplate = currentTemplate.toLowerCase().trim();
 
-        // If not paid, show pricing modal instead of redirecting
-        if (!userData.paid) {
+        const isTemplatePaid = userData.paid === true || 
+          (userData.paidTemplates && (
+            userData.paidTemplates[currentTemplate] === true ||
+            userData.paidTemplates[normalizedTemplate] === true
+          ));
+
+        if (!isTemplatePaid) {
           setShowPricingModal(true);
-          setIsSaving(false);
           return;
         }
       }
 
-      // Build the invite ID
+      const currentTemplate = formData.template || "minimal";
       const id = isEditMode
         ? inviteId || formData.slug || siteSlug
-        : Math.random().toString(36).substring(2, 10);
+        : formData.slug || formData.id || Math.random().toString(36).substring(2, 10);
 
       const inviteData: Partial<WeddingInvite> = {
         ...formData,
@@ -463,19 +491,19 @@ export default function Builder() {
         userName: currentUser.displayName || "User",
         email: currentUser.email || "",
         slug: id,
+        template: currentTemplate,
         published: true,
         isPaid: true,
         updatedAt: new Date().toISOString(),
       };
 
-      // Save via backend
       const saveRes = await fetch("/api/save-invite", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id, ...inviteData }),
+        body: JSON.stringify({ id, template: currentTemplate, ...inviteData }),
       });
 
       if (!saveRes.ok) {
@@ -487,6 +515,12 @@ export default function Builder() {
         } catch {
           errorMessage = errText || errorMessage;
         }
+        
+        if (errorMessage === "paymentRequired" || saveRes.status === 402) {
+          setShowPricingModal(true);
+          return;
+        }
+        
         throw new Error(errorMessage);
       }
 
@@ -502,10 +536,15 @@ export default function Builder() {
         }, 1500);
       }
     } catch (error: any) {
-      console.error("Publish error:", error);
-      toast.error(error.message || "An error occurred during publish.");
+      if (error.message !== "paymentRequired") {
+        console.error("Publish error:", error);
+        toast.error(error.message || "An error occurred during publish.");
+      } else {
+        setShowPricingModal(true);
+      }
     } finally {
       setIsSaving(false);
+      setIsCheckingPayment(false);
     }
   };
 
@@ -520,8 +559,11 @@ export default function Builder() {
   };
 
   const handlePaymentAndPublish = async () => {
-    if (!currentUser) return;
+    if (!currentUser || isProcessingPayment) return;
     setIsProcessingPayment(true);
+
+    const currentTemplate = formData.template || "minimal";
+    const templatePricePaise = TEMPLATE_PRICE_PAISE[currentTemplate] || 99900;
 
     try {
       // 1. Get Config (Key ID)
@@ -542,6 +584,7 @@ export default function Builder() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`
         },
+        body: JSON.stringify({ templateId: currentTemplate })
       });
       const orderData = await orderRes.json();
 
@@ -553,14 +596,14 @@ export default function Builder() {
 
       const options = {
         key: razorpayKeyId,
-        amount: 99900,
+        amount: templatePricePaise,
         currency: "INR",
         name: "Union Digital",
         description: "Publish Your Invitation",
         order_id: order.id,
         handler: async function(response: any) {
           try {
-            // 3. Verify payment
+      // 3. Verify payment
             const verifyRes = await fetch("/api/verify-payment", {
               method: "POST",
               headers: { 
@@ -573,17 +616,21 @@ export default function Builder() {
                 razorpay_signature: response.razorpay_signature,
                 userId: currentUser.uid,
                 email: currentUser.email,
+                templateId: currentTemplate,
               })
             });
             const verifyData = await verifyRes.json();
             
             if (verifyData.success) {
+              toast.success("Payment verified! Finalizing...");
               setShowPricingModal(false);
-              // now save the invite
-              await handleSave(true);
-              // Success modal is shown by handleSave(true)
+              // Small delay to allow Firestore consistency
+              setTimeout(async () => {
+                await handleSave(true);
+              }, 1500);
             } else {
               toast.error("Payment verification failed. Please contact support.");
+              setIsProcessingPayment(false);
             }
           } catch (err) {
             console.error("Verification error:", err);
@@ -1060,17 +1107,17 @@ export default function Builder() {
             {/* Sidebar Publish Button */}
             <div className="p-6 border-t border-editorial-border bg-white mt-auto">
               <button
-                onClick={handleSave}
-                disabled={isSaving}
+                onClick={() => handleSave()}
+                disabled={isSaving || isCheckingPayment}
                 className="w-full editorial-button bg-editorial-ink text-white py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all disabled:opacity-60"
               >
-                {isSaving ? (
+                {isSaving || isCheckingPayment ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Rocket className="w-4 h-4" />
                 )}
                 <span className="text-[11px] font-bold uppercase tracking-[0.2em]">
-                  {isSaving ? "Processing..." : "🚀 Publish Invitation"}
+                  {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Invitation"}
                 </span>
               </button>
             </div>
@@ -1152,17 +1199,17 @@ export default function Builder() {
               </button>
 
               <button
-                onClick={handleSave}
-                disabled={isSaving}
+                onClick={() => handleSave()}
+                disabled={isSaving || isCheckingPayment}
                 className="editorial-button bg-editorial-accent hover:bg-[#B37E4A] text-white px-5 py-2 flex items-center justify-center gap-2 disabled:opacity-60"
               >
-                {isSaving ? (
+                {isSaving || isCheckingPayment ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
                   <Send className="w-3.5 h-3.5" />
                 )}
                 <span className="text-[10px] font-bold uppercase tracking-widest">
-                  {isSaving ? "Publishing..." : "Publish"}
+                  {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "Publish"}
                 </span>
               </button>
             </div>
@@ -1280,8 +1327,11 @@ export default function Builder() {
                   <Rocket className="w-8 h-8 text-editorial-accent" />
                 </div>
                 <h2 className="text-3xl font-serif italic mb-2">Publish Your Invitation</h2>
+                <p className="text-xs uppercase tracking-widest text-editorial-muted">
+                  {templateConfig?.name} Template
+                </p>
                 <div className="flex items-center justify-center gap-2 mt-4">
-                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹999</span>
+                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹{TEMPLATE_PRICES[formData.template || "minimal"] || 999}</span>
                   <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted">One-time</span>
                 </div>
               </div>
@@ -1312,7 +1362,7 @@ export default function Builder() {
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
-                  {isProcessingPayment ? "Processing..." : "Pay ₹999 & Publish"}
+                  {isProcessingPayment ? "Processing..." : `Pay ₹${TEMPLATE_PRICES[formData.template || "minimal"] || 999} & Publish`}
                 </button>
                 <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-tight">
                   After 500 views, top up for ₹499 to get 500 more views

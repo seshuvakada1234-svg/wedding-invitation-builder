@@ -9,6 +9,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signInAnonymously,
+  signOut,
 } from "firebase/auth";
 import firebaseConfig from "../../firebase-applet-config.json";
 
@@ -23,6 +24,7 @@ export const googleProvider = new GoogleAuthProvider();
 
 export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
 export const loginAnonymously = () => signInAnonymously(auth);
+export const logout = () => signOut(auth);
 
 // ✅ call this before every fetch to /api/* that needs auth
 export async function getAuthToken(): Promise<string | null> {
