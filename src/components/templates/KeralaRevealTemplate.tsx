@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import MapPreview from "../MapPreview";
+import TemplateImage from "../TemplateImage";
 import { 
   MapPin, 
   Calendar, 
@@ -20,6 +21,7 @@ interface WeddingEvent {
   time: string;
   location: string;
   description?: string;
+  image?: string | any;
 }
 
 interface KeralaRevealTemplateProps {
@@ -37,6 +39,8 @@ interface KeralaRevealTemplateProps {
   galleryImages?: string[];
   story?: string;
   enableEnvelope?: boolean;
+  isEditable?: boolean;
+  onImageEdit?: (target: string, index?: number) => void;
 }
 
 /* ─── CONSTANTS ─── */
@@ -92,6 +96,8 @@ export default function KeralaRevealTemplate({
   galleryImages = [],
   story = "Our journey began in the serene backwaters of Konaseema, where the Godavari whispers ancient tales of love. What started as a chance meeting beneath the coconut groves has blossomed into a bond as deep as the river itself.",
   enableEnvelope = true,
+  isEditable = false,
+  onImageEdit,
 }: KeralaRevealTemplateProps) {
   const [isOpenedManual, setIsOpenedManual] = useState(false);
   
@@ -192,16 +198,17 @@ export default function KeralaRevealTemplate({
         {/* ─── HERO ─── */}
         <section className="relative h-screen flex items-center justify-center overflow-hidden text-center text-white">
           <div className="absolute inset-0 z-0">
-            <img 
-              src={coverImage || undefined} 
-              alt="Hero" 
-              className="w-full h-full object-cover brightness-[0.4]" 
-              loading="eager"
+            <TemplateImage
+              image={coverImage}
+              alt="Hero"
+              className="w-full h-full brightness-[0.4]"
+              isEditable={isEditable}
+              onEdit={() => onImageEdit?.("cover")}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-green-900/40 via-transparent to-black/60" />
+            <div className="absolute inset-0 bg-gradient-to-b from-green-900/40 via-transparent to-black/60 pointer-events-none" />
           </div>
           
-          <div className="relative z-10 px-4">
+          <div className="relative z-10 px-4 pointer-events-none">
             <motion.p initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} className="text-[10px] md:text-xs uppercase tracking-[0.5em] mb-4 opacity-80">
               The Wedding of
             </motion.p>
@@ -252,13 +259,14 @@ export default function KeralaRevealTemplate({
           <SectionHeader title="Our Story" subtitle="A journey written in the stars" />
           <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
             <motion.div initial={{ opacity: 0, x: -50 }} whileInView={{ opacity: 1, x: 0 }} className="relative aspect-[4/5] rounded-3xl overflow-hidden shadow-2xl">
-              <img 
-                src={displayGallery[0] || undefined} 
+              <TemplateImage 
+                image={displayGallery[0]} 
                 alt="Story Cover" 
-                className="w-full h-full object-cover" 
-                loading="lazy"
+                className="w-full h-full"
+                isEditable={isEditable}
+                onEdit={() => onImageEdit?.("gallery", 0)}
               />
-              <div className="absolute inset-0 bg-green-900/20" />
+              <div className="absolute inset-0 bg-green-900/20 pointer-events-none" />
             </motion.div>
             <motion.div initial={{ opacity: 0, x: 50 }} whileInView={{ opacity: 1, x: 0 }} className="space-y-6">
               <h3 className="text-2xl md:text-3xl font-serif italic text-[#8B1E1E]">Beginning of Forever</h3>
@@ -298,6 +306,15 @@ export default function KeralaRevealTemplate({
                 <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center text-green-700 mx-auto mb-4">
                   <Calendar size={18} />
                 </div>
+                <div className="w-full aspect-[16/10] rounded-xl overflow-hidden mb-4 shadow-sm">
+                  <TemplateImage
+                    image={event.image}
+                    alt={event.name}
+                    className="w-full h-full"
+                    isEditable={isEditable}
+                    onEdit={() => onImageEdit?.("event", idx)}
+                  />
+                </div>
                 <h3 className="text-lg font-serif italic text-green-900 mb-2">{event.name}</h3>
                 <div className="text-[11px] font-bold text-yellow-600 uppercase mb-1">{event.date}</div>
                 <div className="text-xs text-neutral-400 mb-4">{event.time}</div>
@@ -316,11 +333,12 @@ export default function KeralaRevealTemplate({
                 key={idx}
                 className="flex-shrink-0 w-64 md:w-80 aspect-[3/4] rounded-2xl overflow-hidden shadow-lg snap-start border-4 border-white"
               >
-                <img 
-                  src={img || undefined} 
+                <TemplateImage 
+                  image={img} 
                   alt={`Gallery ${idx}`} 
-                  className="w-full h-full object-cover" 
-                  loading="lazy"
+                  className="w-full h-full" 
+                  isEditable={isEditable}
+                  onEdit={() => onImageEdit?.("gallery", idx)}
                 />
               </motion.div>
             ))}

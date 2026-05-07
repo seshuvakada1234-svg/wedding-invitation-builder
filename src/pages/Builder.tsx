@@ -34,13 +34,19 @@ import {
   Copy,
   Check,
   Rocket,
+  Edit2,
+  Move,
+  ZoomIn as ZoomIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { WeddingInvite, TemplateType, WeddingEvent } from "../types";
-import { auth, authFetch, handleFirestoreError, loginAnonymously } from "../lib/firebase";
+import { WeddingInvite, TemplateType, WeddingEvent, EditableImage } from "../types";
+import { auth, authFetch, db, handleFirestoreError, loginAnonymously } from "../lib/firebase";
 import { getTemplateById } from "../templates";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 import toast from "react-hot-toast";
+import ImageEditorModal from "../components/ImageEditorModal";
+import ImageItem from "../components/ImageItem";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -64,24 +70,6 @@ const GALLERY_DEFAULTS: Record<string, string[]> = {
     "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800",
     "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800",
   ],
-};
-
-const TEMPLATE_PRICES: Record<string, number> = {
-  "minimal": 499,
-  "housewarming-south": 799,
-  "kerala-wedding": 799,
-  "konaseema": 999,
-  "kerala-envelope-reveal": 1299,
-  "royal-wedding": 1499,
-};
-
-const TEMPLATE_PRICE_PAISE: Record<string, number> = {
-  "minimal": 49900,
-  "housewarming-south": 79900,
-  "kerala-wedding": 79900,
-  "konaseema": 99900,
-  "kerala-envelope-reveal": 129900,
-  "royal-wedding": 149900,
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -130,6 +118,38 @@ export default function Builder() {
   // auth is restored from session storage.
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [templatePrices, setTemplatePrices] = useState<Record<string, number>>({
+    "minimal": 499,
+    "housewarming-south": 799,
+    "kerala-wedding": 799,
+    "konaseema": 999,
+    "kerala-envelope-reveal": 1299,
+    "royal-wedding": 1499,
+  });
+
+  useEffect(() => {
+    async function loadDynamicPrices() {
+      try {
+        const templates = ["minimal", "housewarming-south", "kerala-wedding", "konaseema", "kerala-envelope-reveal", "royal-wedding"];
+        const promises = templates.map(t => getDoc(doc(db, "templates", t)));
+        const snaps = await Promise.all(promises);
+        
+        const newPrices: Record<string, number> = { ...templatePrices };
+        snaps.forEach((snap, i) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.publishPrice) {
+              newPrices[templates[i]] = Number(data.publishPrice);
+            }
+          }
+        });
+        setTemplatePrices(newPrices);
+      } catch (e) {
+        console.error("Failed to load dynamic prices in Builder:", e);
+      }
+    }
+    loadDynamicPrices();
+  }, []);
 
   useEffect(() => {
     // onAuthStateChanged fires once immediately with the persisted user (or null).
@@ -168,10 +188,17 @@ export default function Builder() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [viewDevice, setViewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
 
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [imageEditorConfig, setImageEditorConfig] = useState<{
+    isOpen: boolean;
+    image: string | EditableImage | null;
+    target: "cover" | "gallery";
+    index?: number;
+    aspect?: number;
+  }>({
+    isOpen: false,
+    image: null,
+    target: "cover",
+  });
 
   // ── Load existing invite ────────────────────────────────────────────────────
   useEffect(() => {
@@ -263,6 +290,148 @@ export default function Builder() {
     }));
   };
 
+  const handleImageEditorSave = async (data: EditableImage) => {
+    if (imageEditorConfig.target === "cover") {
+      setFormData((prev) => {
+        // Revoke old blob URL if existing
+        if (typeof prev.coverImage === "object" && prev.coverImage.url.startsWith("blob:")) {
+          URL.revokeObjectURL(prev.coverImage.url);
+        }
+        return { ...prev, coverImage: data };
+      });
+      toast.success("Cover image added to preview!");
+    } else if (imageEditorConfig.target === "gallery" && typeof imageEditorConfig.index === "number") {
+      const idx = imageEditorConfig.index;
+      setFormData((prev) => {
+        const newGallery = [...(prev.galleryImages || [])];
+        const oldImg = newGallery[idx];
+        if (typeof oldImg === "object" && oldImg.url.startsWith("blob:")) {
+          URL.revokeObjectURL(oldImg.url);
+        }
+        newGallery[idx] = data;
+        return { ...prev, galleryImages: newGallery };
+      });
+      toast.success("Gallery image added to preview!");
+    } else if (imageEditorConfig.target === "event" && typeof imageEditorConfig.index === "number") {
+      const idx = imageEditorConfig.index;
+      setFormData((prev) => {
+        const newEvents = [...(prev.events || [])];
+        if (newEvents[idx]) {
+          const oldImg = newEvents[idx].image;
+          if (typeof oldImg === "object" && oldImg.url.startsWith("blob:")) {
+            URL.revokeObjectURL(oldImg.url);
+          }
+          newEvents[idx] = {
+            ...newEvents[idx],
+            image: data
+          };
+        }
+        return { ...prev, events: newEvents };
+      });
+      toast.success("Event image added to preview!");
+    }
+  };
+
+  const uploadPendingImages = async (data: Partial<WeddingInvite>) => {
+    const updatedData = { ...data };
+    const uploadMap = new Map<string, { url: string; key: string }>();
+    const collectTasks: (() => Promise<void>)[] = [];
+
+    // Helper to add upload task
+    const addTask = (file: File, previewUrl: string) => {
+      collectTasks.push(async () => {
+        const res = await uploadImage(file);
+        uploadMap.set(previewUrl, res);
+      });
+    };
+
+    if (typeof updatedData.coverImage === 'object' && updatedData.coverImage?.file) {
+      addTask(updatedData.coverImage.file, updatedData.coverImage.url);
+    }
+
+    updatedData.galleryImages?.forEach((img) => {
+      if (typeof img === 'object' && img.file) {
+        addTask(img.file, img.url);
+      }
+    });
+
+    updatedData.events?.forEach((ev) => {
+      if (typeof ev.image === 'object' && ev.image.file) {
+        addTask(ev.image.file, ev.image.url);
+      }
+    });
+
+    if (collectTasks.length === 0) return updatedData;
+
+    const toastId = toast.loading("Uploading images to secure storage...");
+    try {
+      // Execute in sequence or small batches to avoid overwhelming the server
+      for (const task of collectTasks) {
+        await task();
+      }
+      
+      // Map back uploaded URLs
+      if (typeof updatedData.coverImage === 'object' && updatedData.coverImage?.file) {
+        const result = uploadMap.get(updatedData.coverImage.url);
+        if (result) {
+          updatedData.coverImage = { ...updatedData.coverImage, url: result.url, file: undefined };
+          updatedData.coverImageKey = result.key;
+        }
+      }
+
+      if (updatedData.galleryImages) {
+        updatedData.galleryImages = updatedData.galleryImages.map(img => {
+          if (typeof img === 'object' && img.file) {
+            const result = uploadMap.get(img.url);
+            if (result) return { ...img, url: result.url, file: undefined };
+          }
+          return img;
+        });
+      }
+
+      if (updatedData.events) {
+        updatedData.events = updatedData.events.map(ev => {
+          if (typeof ev.image === 'object' && ev.image.file) {
+            const result = uploadMap.get(ev.image.url);
+            if (result) return { ...ev, image: { ...ev.image, url: result.url, file: undefined } };
+          }
+          return ev;
+        });
+      }
+      
+      toast.success("All images uploaded!", { id: toastId });
+    } catch (err) {
+      toast.error("Image upload failed. Please try again.", { id: toastId });
+      throw err;
+    }
+
+    return updatedData;
+  };
+
+  const openImageEditor = (target: string, image: string | EditableImage | null, index?: number, aspect?: number) => {
+    let finalAspect = aspect;
+    if (!finalAspect) {
+      if (target === "cover") {
+        finalAspect = 16 / 9;
+      } else if (target === "event") {
+        finalAspect = 16 / 10;
+      } else {
+        // Default gallery aspects based on template
+        if (formData.template === "minimal") finalAspect = 1;
+        else if (formData.template === "kerala-envelope-reveal") finalAspect = 3 / 4;
+        else finalAspect = 4 / 5; // royal, konaseema, kerala, housewarming
+      }
+    }
+
+    setImageEditorConfig({
+      isOpen: true,
+      image,
+      target,
+      index,
+      aspect: finalAspect,
+    });
+  };
+
   const uploadImage = async (file: File) => {
     // FIX: use currentUser from state, not auth.currentUser directly.
     if (!currentUser) throw new Error("Must be logged in to upload.");
@@ -296,8 +465,24 @@ export default function Builder() {
       throw new Error(errorMessage);
     }
 
-    const data = await res.json();
-    return { url: data.url, key: data.key };
+    const contentType = res.headers.get("content-type");
+    if (!contentType || !contentType.includes("application/json")) {
+      const text = await res.text();
+      console.error("Non-JSON response received:", text.substring(0, 500));
+      if (text.includes("<title>")) {
+        const titleMatch = text.match(/<title>(.*?)<\/title>/);
+        if (titleMatch) throw new Error(`Server Error: ${titleMatch[1]}`);
+      }
+      throw new Error("Server returned an invalid response. Please try again.");
+    }
+
+    try {
+      const data = await res.json();
+      return { url: data.url, key: data.key };
+    } catch (e) {
+      console.error("JSON parse error on upload:", e);
+      throw new Error("Failed to parse server response.");
+    }
   };
 
   const deleteImage = async (key: string) => {
@@ -308,48 +493,6 @@ export default function Builder() {
       });
     } catch (error) {
       console.error("Delete failed", error);
-    }
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast.error("Only image files are allowed.");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File is too large. Max 5MB allowed.");
-      return;
-    }
-
-    setPendingFile(file);
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setUploadSuccess(null);
-  };
-
-  const handleImageSave = async () => {
-    if (!pendingFile) return;
-
-    setIsUploading(true);
-    setUploadSuccess(null);
-
-    try {
-      const { url, key } = await uploadImage(pendingFile);
-
-      if (formData.coverImageKey) {
-        deleteImage(formData.coverImageKey);
-      }
-
-      setFormData((prev) => ({ ...prev, coverImage: url, coverImageKey: key }));
-      setUploadSuccess("Image saved successfully!");
-      setPendingFile(null);
-    } catch (error) {
-      toast.error("Upload failed: " + (error instanceof Error ? error.message : String(error)));
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -381,12 +524,40 @@ export default function Builder() {
     try {
       const token = await currentUser.getIdToken();
       
+      // Check if user is paid to decide whether to upload images
+      let isPaid = false;
+      try {
+        const checkRes = await fetch("/api/check-user", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (checkRes.ok) {
+          const userData = await checkRes.json();
+          const currentTemplate = (formData.template || "minimal") as string;
+          const normalizedTemplate = currentTemplate.toLowerCase().trim();
+          isPaid = userData.paid === true || 
+            (userData.paidTemplates && (
+              userData.paidTemplates[currentTemplate] === true ||
+              userData.paidTemplates[normalizedTemplate] === true
+            ));
+        }
+      } catch (e) {
+        console.error("Failed to check payment status for draft save, assuming unpaid", e);
+      }
+
+      let finalizedData = { ...formData };
+      if (isPaid) {
+        finalizedData = await uploadPendingImages(formData);
+      }
+
       const id = isEditMode
-        ? inviteId || formData.slug || siteSlug
-        : Math.random().toString(36).substring(2, 10);
+        ? inviteId || finalizedData.slug || siteSlug
+        : finalizedData.slug || finalizedData.id || Math.random().toString(36).substring(2, 10);
 
       const inviteData: Partial<WeddingInvite> = {
-        ...formData,
+        ...finalizedData,
         id,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
@@ -486,13 +657,17 @@ export default function Builder() {
         }
       }
 
-      const currentTemplate = formData.template || "minimal";
+      // ── BATCH UPLOAD PENDING IMAGES ──
+      // This ensures images are ONLY uploaded when the user is about to publish a paid invite
+      const finalizedData = await uploadPendingImages(formData);
+
+      const currentTemplate = finalizedData.template || "minimal";
       const id = isEditMode
-        ? inviteId || formData.slug || siteSlug
-        : formData.slug || formData.id || Math.random().toString(36).substring(2, 10);
+        ? inviteId || finalizedData.slug || siteSlug
+        : finalizedData.slug || finalizedData.id || Math.random().toString(36).substring(2, 10);
 
       const inviteData: Partial<WeddingInvite> = {
-        ...formData,
+        ...finalizedData,
         id,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
@@ -568,9 +743,10 @@ export default function Builder() {
   const handlePaymentAndPublish = async () => {
     if (!currentUser || isProcessingPayment) return;
     setIsProcessingPayment(true);
-
+  
     const currentTemplate = formData.template || "minimal";
-    const templatePricePaise = TEMPLATE_PRICE_PAISE[currentTemplate] || 99900;
+    const templatePrice = templatePrices[currentTemplate] || 999;
+    const templatePricePaise = templatePrice * 100;
 
     try {
       // 1. Get Config (Key ID)
@@ -978,137 +1154,93 @@ export default function Builder() {
                 )}
               </div>
 
-              {/* Media Assets */}
-              <div>
-                <h2 className="editorial-section-title text-[11px] mb-4">
-                  {isHousewarming ? "Visual Assets" : "Artboard Assets"}
-                </h2>
-
-                {(previewUrl || formData.coverImage) && (
-                  <div className="mb-4 space-y-3">
-                    <div className="aspect-video rounded-xl overflow-hidden border border-editorial-border relative group shadow-sm bg-editorial-bg">
-                      <img
-                        src={previewUrl || formData.coverImage}
-                        alt="Preview"
-                        className="w-full h-full object-cover"
+              {/* Imagery Assets */}
+              <div className="space-y-8">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="editorial-section-title text-[11px]">Primary Imagery</h2>
+                    <span className="text-[10px] font-bold text-editorial-accent/60 uppercase tracking-widest bg-editorial-accent/5 px-2 py-0.5 rounded">
+                      Hero Section
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="relative group">
+                      <ImageItem
+                        image={formData.coverImage}
+                        className="w-full aspect-[16/9] rounded-2xl border border-editorial-border shadow-sm bg-editorial-bg"
+                        onClick={() => openImageEditor("cover", formData.coverImage || null, undefined, 16 / 9)}
                       />
-                      <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <p className="text-[9px] text-white font-bold uppercase tracking-widest">
-                          {previewUrl ? "New Selection" : "Active Cover"}
-                        </p>
+                      <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                         <div className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white">
+                            <Edit2 className="w-3.5 h-3.5 text-editorial-accent" />
+                         </div>
                       </div>
                     </div>
+                    <p className="text-[9px] text-slate-400 font-medium leading-relaxed italic">
+                      Tip: Tap the image to reposition, crop or zoom for the perfect hero layout.
+                    </p>
+                  </div>
+                </div>
 
-                    {pendingFile && (
-                      <div className="flex flex-col gap-2">
+                {/* Gallery */}
+                <div className="pt-8 border-t border-editorial-border/60">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h2 className="editorial-section-title text-[11px] mb-1">Photo Gallery</h2>
+                      <p className="text-[9px] text-slate-400 font-medium tracking-tight">Showcase your journey</p>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const newGallery = [...(formData.galleryImages || [])];
+                        newGallery.push(""); // Add empty placeholder
+                        const newIdx = newGallery.length - 1;
+                        setFormData({ ...formData, galleryImages: newGallery });
+                        openImageEditor("gallery", null, newIdx, 1);
+                      }}
+                      className="p-2 bg-editorial-bg border border-editorial-border rounded-full text-editorial-accent hover:bg-slate-50 transition-all shadow-sm"
+                      title="Add Image"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
+                  <div className="grid grid-cols-3 gap-3">
+                    {formData.galleryImages?.map((img, idx) => (
+                      <div key={idx} className="relative aspect-square group">
+                        <ImageItem
+                          image={img}
+                          className="w-full h-full rounded-xl border border-editorial-border bg-editorial-bg"
+                          onClick={() => openImageEditor("gallery", img, idx, 1)}
+                        />
                         <button
-                          onClick={handleImageSave}
-                          disabled={isUploading}
-                          className={`w-full py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all ${
-                            isUploading
-                              ? "bg-editorial-border text-editorial-ink/50 cursor-not-allowed"
-                              : "bg-editorial-accent text-white hover:bg-opacity-90 shadow-md"
-                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeGalleryImage(idx);
+                          }}
+                          className="absolute -top-1.5 -right-1.5 bg-white shadow-xl border border-red-50 p-1.5 rounded-full text-red-500 opacity-0 group-hover:opacity-100 transition-all z-10 hover:scale-110"
                         >
-                          {isUploading ? (
-                            <span className="flex items-center justify-center gap-2">
-                              <Loader2 className="w-3 h-3 animate-spin" /> Saving...
-                            </span>
-                          ) : (
-                            "Save Image to Cloud"
-                          )}
+                          <Trash2 className="w-3 h-3" />
                         </button>
-                        <p className="text-[9px] text-center text-editorial-ink/60 italic">
-                          Click save to store this image in permanent storage
-                        </p>
                       </div>
-                    )}
-
-                    {uploadSuccess && (
-                      <div className="p-2 bg-green-50 border border-green-100 rounded-lg flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                        <p className="text-[9px] text-green-700 font-medium uppercase tracking-tight">
-                          {uploadSuccess}
-                        </p>
-                      </div>
+                    ))}
+                    
+                    {(!formData.galleryImages || formData.galleryImages.length === 0) && (
+                      <button 
+                        onClick={() => {
+                          const newGallery = [""];
+                          setFormData({ ...formData, galleryImages: newGallery });
+                          openImageEditor("gallery", null, 0, 1);
+                        }}
+                        className="col-span-3 border-2 border-dashed border-editorial-border rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-slate-300 hover:text-editorial-accent hover:border-editorial-accent transition-all bg-editorial-bg/30"
+                      >
+                         <Images className="w-6 h-6" />
+                         <span className="text-[10px] font-bold uppercase tracking-widest">Start your gallery</span>
+                      </button>
                     )}
                   </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <label className="block border-2 border-dashed border-editorial-border rounded-xl p-6 text-center cursor-pointer hover:border-editorial-accent hover:bg-editorial-bg transition-all group">
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={handleImageSelect}
-                    />
-                    <Upload className="w-5 h-5 text-editorial-accent mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                    <div className="text-[10px] font-bold text-editorial-ink uppercase tracking-widest">
-                      {previewUrl ? "Change Selection" : isHousewarming ? "Select Main Photo" : "Select Cover Image"}
-                    </div>
-                    <p className="text-[9px] text-editorial-ink/40 mt-1 uppercase tracking-tighter font-medium">
-                      PNG, JPG, WEBP • Max 5MB
-                    </p>
-                  </label>
-
-                  <label className="block border-2 border-dashed border-editorial-border rounded-xl p-6 text-center cursor-pointer hover:border-editorial-accent hover:bg-editorial-bg transition-all group">
-                    <input
-                      type="file"
-                      className="hidden"
-                      accept="image/png,image/jpeg,image/webp"
-                      multiple
-                      onChange={async (e) => {
-                        const files = e.target.files;
-                        if (!files) return;
-                        setIsUploading(true);
-                        setUploadSuccess(null);
-                        for (let i = 0; i < files.length; i++) {
-                          const file = files[i];
-                          if (file.size > 5 * 1024 * 1024) {
-                            toast.error(`File ${file.name} is too large. Skipping.`);
-                            continue;
-                          }
-                          try {
-                            const { url, key } = await uploadImage(file);
-                            setFormData((prev) => ({
-                              ...prev,
-                              galleryImages: [...(prev.galleryImages || []), url],
-                              galleryImageKeys: [...(prev.galleryImageKeys || []), key],
-                            }));
-                          } catch (err) {
-                            console.error(err);
-                          }
-                        }
-                        setIsUploading(false);
-                        setUploadSuccess("Gallery updated!");
-                      }}
-                    />
-                    <Images className="w-5 h-5 text-editorial-accent mx-auto mb-2 group-hover:scale-110 transition-transform" />
-                    <div className="text-[10px] font-bold text-editorial-ink uppercase tracking-widest">Add to Gallery</div>
-                    <p className="text-[9px] text-editorial-ink/40 mt-1 uppercase tracking-tighter font-medium">
-                      Auto-upload enabled
-                    </p>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {formData.galleryImages?.map((img, i) => (
-                    <div
-                      key={i}
-                      className="aspect-square rounded-lg overflow-hidden border border-editorial-border relative group"
-                    >
-                      <img src={img} alt="Gallery" className="w-full h-full object-cover" />
-                      <button
-                        onClick={() => removeGalleryImage(i)}
-                        className="absolute inset-0 bg-red-500/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 className="w-4 h-4 text-white" />
-                      </button>
-                    </div>
-                  ))}
                 </div>
               </div>
+
             </div>
 
             {/* Sidebar Publish Button */}
@@ -1266,6 +1398,16 @@ export default function Builder() {
                   }}
                   address={formData.venueAddress || formData.location}
                   image={formData.coverImage}
+                  isEditable={true}
+                  onImageEdit={(target: string, index?: number) => {
+                    if (target === "cover") {
+                      openImageEditor("cover", formData.coverImage || null);
+                    } else if (target === "gallery" && typeof index === "number") {
+                      openImageEditor("gallery", formData.galleryImages?.[index] || null, index);
+                    } else if (target === "event" && typeof index === "number") {
+                      openImageEditor("event", formData.events?.[index]?.image || null, index);
+                    }
+                  }}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-editorial-muted font-serif italic">
@@ -1304,6 +1446,16 @@ export default function Builder() {
         )}
       </AnimatePresence>
 
+      {/* ── Image Editor Modal ── */}
+      {imageEditorConfig.isOpen && (
+        <ImageEditorModal
+          image={imageEditorConfig.image}
+          aspect={imageEditorConfig.aspect}
+          onClose={() => setImageEditorConfig({ ...imageEditorConfig, isOpen: false })}
+          onSave={handleImageEditorSave}
+        />
+      )}
+
       {/* ── Pricing Modal ── */}
       <AnimatePresence>
         {showPricingModal && (
@@ -1338,7 +1490,7 @@ export default function Builder() {
                   {templateConfig?.name} Template
                 </p>
                 <div className="flex items-center justify-center gap-2 mt-4">
-                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹{TEMPLATE_PRICES[formData.template || "minimal"] || 999}</span>
+                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹{templatePrices[formData.template || "minimal"] || 999}</span>
                   <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted">One-time</span>
                 </div>
               </div>
@@ -1369,7 +1521,7 @@ export default function Builder() {
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
-                  {isProcessingPayment ? "Processing..." : `Pay ₹${TEMPLATE_PRICES[formData.template || "minimal"] || 999} & Publish`}
+                  {isProcessingPayment ? "Processing..." : `Pay ₹${templatePrices[formData.template || "minimal"] || 999} & Publish`}
                 </button>
                 <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-tight">
                   After 500 views, top up for ₹499 to get 500 more views

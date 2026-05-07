@@ -15,6 +15,7 @@ import {
 } from "motion/react";
 import CountdownTimer from "../CountdownTimer";
 import MapPreview from "../MapPreview";
+import TemplateImage from "../TemplateImage";
 
 /* ═══════════════════════════ SVG DECORATIONS ═══════════════════════════ */
 
@@ -416,6 +417,8 @@ interface KonaseemaWeddingTemplateProps {
   galleryImages: string[];
   story?: string;
   enable3D?: boolean;
+  isEditable?: boolean;
+  onImageEdit?: (target: string, index?: number) => void;
 }
 
 export default function KonaseemaWeddingTemplate({
@@ -433,6 +436,8 @@ export default function KonaseemaWeddingTemplate({
   galleryImages,
   story = "We warmly invite you to join us as we embark on this beautiful journey amidst the lush greens and gentle rivers of Konaseema. Surrounded by heritage and the warmth of family, we seek your presence and blessings.",
   enable3D = true,
+  isEditable = false,
+  onImageEdit,
 }: KonaseemaWeddingTemplateProps) {
   const heroRef = useRef(null);
   const galleryRef = useRef<HTMLDivElement>(null);
@@ -479,16 +484,18 @@ export default function KonaseemaWeddingTemplate({
         {/* ═══════════ HERO ═══════════ */}
         <section ref={heroRef} className="relative h-[65vh] md:h-[75vh] lg:h-[80vh] flex items-center justify-center overflow-hidden">
           <motion.div className="absolute inset-0" style={{ scale: enable3D ? heroScale : 1 }}>
-            <img
-              src={coverImage || "https://picsum.photos/seed/godavari-coconut-river/1200/800.jpg"}
+            <TemplateImage
+              image={coverImage}
               alt="Hero"
-              className="w-full h-full object-cover"
+              className="w-full h-full"
+              isEditable={isEditable}
+              onEdit={() => onImageEdit?.("cover")}
             />
           </motion.div>
 
           <SunlightRays />
           <motion.div
-            className="absolute inset-0 bg-gradient-to-b from-[#1B5E20]/30 via-transparent to-white"
+            className="absolute inset-0 bg-gradient-to-b from-[#1B5E20]/30 via-transparent to-white pointer-events-none"
             style={{ opacity: heroOpacity }}
           />
 
@@ -501,7 +508,7 @@ export default function KonaseemaWeddingTemplate({
             <ToranSVG className="w-full h-auto drop-shadow-sm opacity-80" />
           </motion.div>
 
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-6 pt-12 text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-6 pt-12 text-center pointer-events-none">
             <motion.p
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -568,6 +575,15 @@ export default function KonaseemaWeddingTemplate({
                 viewport={{ once: true }}
               >
                 <MangoLeaf className="mx-auto mb-4 opacity-20" size={12} />
+                <div className="w-full aspect-[16/10] rounded-xl overflow-hidden mb-6 shadow-sm">
+                  <TemplateImage
+                    image={ev.image}
+                    alt={ev.name}
+                    className="w-full h-full"
+                    isEditable={isEditable}
+                    onEdit={() => onImageEdit?.("event", i)}
+                  />
+                </div>
                 <h3 className="text-md md:text-2xl font-serif text-[#1B5E20] mb-2">{ev.name}</h3>
                 <div className="w-6 md:w-10 h-px bg-[#FBC02D] mx-auto mb-3 opacity-40" />
                 <p className="text-[11px] md:text-sm font-semibold text-[#5D4037] mb-1">{ev.date}</p>
@@ -588,7 +604,13 @@ export default function KonaseemaWeddingTemplate({
                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-6 md:px-12 pb-2">
             {displayGallery.map((src, i) => (
               <div key={i} className={`w-full aspect-[4/5] rounded-xl overflow-hidden shadow-md ${i === 0 ? 'col-span-1 sm:col-span-2' : ''}`}>
-                <img src={src || undefined} alt="" className="w-full h-full object-cover" loading="lazy" />
+                <TemplateImage 
+                  image={src} 
+                  alt="" 
+                  className="w-full h-full" 
+                  isEditable={isEditable}
+                  onEdit={() => onImageEdit?.("gallery", i)}
+                />
               </div>
             ))}
           </div>

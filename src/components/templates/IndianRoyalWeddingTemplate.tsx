@@ -4,6 +4,7 @@ import React, { useRef, useMemo } from "react";
 import { motion, useScroll, useTransform } from "motion/react";
 import CountdownTimer from "../CountdownTimer";
 import MapPreview from "../MapPreview";
+import TemplateImage from "../TemplateImage";
 
 /* ─── DESIGN TOKENS ─── */
 const C = {
@@ -271,6 +272,8 @@ export default function IndianRoyalWeddingTemplate({
   accommodation = "ITC Kakatiya & Park Hyatt (5 min away)",
   story = "A journey of tradition, love, and legacy begins here.",
   enable3D = true,
+  isEditable = false,
+  onImageEdit,
 }: any) {
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
@@ -284,11 +287,16 @@ export default function IndianRoyalWeddingTemplate({
       {/* ═══ HERO ═══ */}
       <section ref={heroRef} style={{ position: "relative", height: "58vh", minHeight: 320, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
         <motion.div style={{ position: "absolute", inset: 0, scale: enable3D ? heroScale : 1 }}>
-          <img src={coverImage || "https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=1600&h=1200&fit=crop&auto=format"}
-            alt="Wedding hero" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          <TemplateImage 
+            image={coverImage} 
+            className="w-full h-full"
+            alt="Wedding hero" 
+            isEditable={isEditable}
+            onEdit={() => onImageEdit?.("cover")}
+          />
         </motion.div>
-        <motion.div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.38), rgba(0,0,0,0.1) 50%, white)", opacity: heroOpacity }} />
-        <div style={{ position: "relative", zIndex: 10, textAlign: "center", padding: "0 20px" }}>
+        <motion.div style={{ position: "absolute", inset: 0, background: "linear-gradient(to bottom, rgba(0,0,0,0.38), rgba(0,0,0,0.1) 50%, white)", opacity: heroOpacity, pointerEvents: "none" }} />
+        <div style={{ position: "relative", zIndex: 10, textAlign: "center", padding: "0 20px", pointerEvents: "none" }}>
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 1.1 }}>
             <MandalaSVG color="#D4AF37" size={42} style={{ margin: "0 auto 12px", opacity: 0.4 }} />
           </motion.div>
@@ -344,6 +352,15 @@ export default function IndianRoyalWeddingTemplate({
                 initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.45, delay: i * 0.09 }} viewport={{ once: true }}>
                 <CornerOrnament className="absolute top-4 left-4" style={{ transform: "scale(0.42)", opacity: 0.2 }} color={isWedding ? C.gold : C.crimson} />
+                <div className="w-full aspect-video rounded-xl overflow-hidden mb-4 shadow-sm border border-gold/10">
+                  <TemplateImage
+                    image={ev.image}
+                    alt={ev.name}
+                    className="w-full h-full"
+                    isEditable={isEditable}
+                    onEdit={() => onImageEdit?.("event", i)}
+                  />
+                </div>
                 <h3 style={{ fontFamily: "Georgia,serif", fontStyle: "italic", fontSize: 13, color: isWedding ? "white" : C.crimson, marginBottom: 7, lineHeight: 1.3, wordBreak: "break-word", width: "100%" }}>{ev.name}</h3>
                 <div style={{ width: 18, height: 1, background: isWedding ? C.gold : C.crimson, opacity: 0.3, marginBottom: 7 }} />
                 <p style={{ fontSize: 9, fontWeight: 600, color: isWedding ? "rgba(255,255,255,0.8)" : "rgba(74,21,21,0.8)", marginBottom: 2 }}>{ev.date}</p>
@@ -370,19 +387,27 @@ export default function IndianRoyalWeddingTemplate({
         {galleryImages[0] && (
           <motion.div style={{ width: "100%", height: 200, borderRadius: 12, overflow: "hidden", marginBottom: 8, background: "#F8F3E8" }}
             whileHover={{ scale: 1.01 }} transition={{ duration: 0.3 }}>
-            <img src={galleryImages[0] || undefined} alt="Wedding photo 1"
-              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} loading="eager"
-              onError={(e: any) => { e.currentTarget.src = "https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=640&h=800&fit=crop&auto=format"; }} />
+            <TemplateImage 
+              image={galleryImages[0]} 
+              className="w-full h-full" 
+              alt="Wedding photo 1" 
+              isEditable={isEditable}
+              onEdit={() => onImageEdit?.("gallery", 0)}
+            />
           </motion.div>
         )}
         {galleryImages.length > 1 && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {galleryImages.slice(1).map((img: string, i: number) => (
+            {galleryImages.slice(1).map((img: any, i: number) => (
               <motion.div key={i} style={{ height: 120, borderRadius: 10, overflow: "hidden", background: "#F8F3E8" }}
                 whileHover={{ scale: 1.02 }} transition={{ duration: 0.3 }}>
-                <img src={img || undefined} alt={`Wedding photo ${i + 2}`}
-                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} loading="lazy"
-                  onError={(e: any) => { e.currentTarget.src = "https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=640&h=800&fit=crop&auto=format"; }} />
+                <TemplateImage 
+                  image={img} 
+                  className="w-full h-full" 
+                  alt={`Wedding photo ${i + 2}`} 
+                  isEditable={isEditable}
+                  onEdit={() => onImageEdit?.("gallery", i + 1)}
+                />
               </motion.div>
             ))}
           </div>

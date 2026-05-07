@@ -4,6 +4,7 @@ import React, { useRef, useMemo } from "react";
 import { motion, useScroll, useTransform, AnimatePresence } from "motion/react";
 import CountdownTimer from "../CountdownTimer";
 import MapPreview from "../MapPreview";
+import TemplateImage from "../TemplateImage";
 import { MapPin, Phone, MessageCircle, Calendar, Clock, Image as ImageIcon } from "lucide-react";
 
 /* ─── DESIGN TOKENS (KERALA THEME) ─── */
@@ -104,6 +105,8 @@ export default function KeralaWeddingTemplate({
   googleMapsLink = "https://maps.google.com/?q=Kochi+Kerala",
   coordinates = "",
   enable3D = true,
+  isEditable = false,
+  onImageEdit,
 }: any) {
   const heroRef = useRef(null);
   const { scrollYProgress } = useScroll({ target: heroRef, offset: ["start start", "end start"] });
@@ -123,16 +126,17 @@ export default function KeralaWeddingTemplate({
             y: enable3D ? heroY : 0
           }}
         >
-          <img 
-            src={coverImage || undefined} 
+          <TemplateImage 
+            image={coverImage} 
             alt="Wedding Cover" 
-            className="w-full h-full object-cover"
-            loading="eager"
+            className="w-full h-full"
+            isEditable={isEditable}
+            onEdit={() => onImageEdit?.("cover")}
           />
-          <div className="absolute inset-0 bg-black/40 bg-gradient-to-t from-[#FDFDFD] via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-black/40 bg-gradient-to-t from-[#FDFDFD] via-transparent to-transparent pointer-events-none" />
         </motion.div>
 
-        <div className="relative z-10 text-center px-4">
+        <div className="relative z-10 text-center px-4 pointer-events-none">
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -207,6 +211,15 @@ export default function KeralaWeddingTemplate({
                 <div className="bg-[#D4AF37]/5 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform">
                   <Calendar size={20} className="text-[#D4AF37]" />
                 </div>
+                <div className="w-full aspect-video rounded-2xl overflow-hidden mb-6 shadow-inner">
+                  <TemplateImage
+                    image={event.image}
+                    alt={event.name}
+                    className="w-full h-full"
+                    isEditable={isEditable}
+                    onEdit={() => onImageEdit?.("event", idx)}
+                  />
+                </div>
                 <h3 className="text-xl font-serif italic mb-4">{event.name}</h3>
                 <div className="space-y-2 mb-6 flex-grow">
                   <p className="flex items-center justify-center gap-2 text-sm font-semibold text-neutral-800">
@@ -247,11 +260,12 @@ export default function KeralaWeddingTemplate({
               viewport={{ once: true }}
               className={`relative overflow-hidden aspect-[4/5] ${i === 1 ? 'md:translate-y-12' : ''}`}
             >
-              <img 
-                src={img || undefined} 
+              <TemplateImage 
+                image={img} 
                 alt={`Wedding moment ${i}`} 
-                className="w-full h-full object-cover transition-transform duration-700 hover:scale-110"
-                loading="lazy"
+                className="w-full h-full transition-transform duration-700 hover:scale-110"
+                isEditable={isEditable}
+                onEdit={() => onImageEdit?.("gallery", i)}
               />
             </motion.div>
           ))}

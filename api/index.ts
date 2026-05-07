@@ -20,12 +20,16 @@ function serializeFirestoreData(data: Record<string, any>) {
 }
 
 function getR2Client() {
+  const endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1");
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim().replace(/^["'](.+)["']$/, "$1");
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim().replace(/^["'](.+)["']$/, "$1");
+
   return new S3Client({
     region: "auto",
-    endpoint: process.env.R2_ENDPOINT!,
+    endpoint: endpoint!,
     credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      accessKeyId: accessKeyId!,
+      secretAccessKey: secretAccessKey!,
     },
   });
 }
@@ -253,7 +257,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── POST /api/upload ──
     if (path === "/api/upload" && method === "POST") {
-      const form = formidable({ maxFileSize: 5 * 1024 * 1024 });
+      const form = formidable({ maxFileSize: 10 * 1024 * 1024 });
       const [fields, files] = await form.parse(req as any);
       const file = Array.isArray(files.file) ? files.file[0] : files.file;
       if (!file) return res.status(400).json({ success: false, error: "No file" });
@@ -262,14 +266,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const timestamp = Date.now();
       const fileName = `users/${userId}/${inviteId}/${timestamp}-${(file.originalFilename || "image.jpg").replace(/[^a-z0-9.]/gi, "_").toLowerCase()}`;
       const client = getR2Client();
+      
+      const bucket = process.env.R2_BUCKET?.trim().replace(/^["'](.+)["']$/, "$1");
+      if (!bucket) throw new Error("R2_BUCKET not configured");
+
       await client.send(new PutObjectCommand({
-        Bucket: process.env.R2_BUCKET!,
+        Bucket: bucket,
         Key: fileName,
         Body: fs.readFileSync(file.filepath),
         ContentType: file.mimetype || "image/jpeg",
       }));
-      const publicUrl = process.env.R2_PUBLIC_URL;
-      const url = publicUrl ? `${publicUrl.replace(/\/$/, "")}/${fileName}` : `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}/${fileName}`;
+      const publicUrl = process.env.R2_PUBLIC_URL?.trim().replace(/^["'](.+)["']$/, "$1");
+      const r2Endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1");
+      
+      const url = publicUrl ? `${publicUrl.replace(/\/$/, "")}/${fileName}` : `${r2Endpoint}/${bucket}/${fileName}`;
       return res.json({ success: true, url, key: fileName });
     }
 

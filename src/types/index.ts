@@ -10,19 +10,32 @@ export interface WeddingEvent {
   date: string;
   time: string;
   location: string;
+  image?: string | EditableImage;
+}
+
+export interface EditableImage {
+  url: string;
+  scale: number;
+  positionX: number;
+  positionY: number;
+  width?: number;
+  height?: number;
+  file?: File;
 }
 
 export interface WeddingInvite {
   id?: string;
   slug: string;
   userId: string;
+  userName?: string;
+  email?: string;
   brideName: string;
   groomName: string;
   weddingDate: string;
   location: string;
-  coverImage?: string;
+  coverImage?: string | EditableImage;
   coverImageKey?: string;
-  galleryImages: string[];
+  galleryImages: (string | EditableImage)[];
   galleryImageKeys?: string[];
   googleMapsLink: string;
   googleMapsEmbedUrl?: string;
@@ -39,6 +52,7 @@ export interface WeddingInvite {
   events: WeddingEvent[];
   template: TemplateType;
   isPaid: boolean;
+  published: boolean;
   views: number;
   viewLimit: number;
   createdAt: string;

@@ -70,6 +70,30 @@ export const templates: TemplateConfig[] = [
     price: 999
   },
   {
+    id: "minimal",
+    name: "Minimal Royal",
+    category: "modern",
+    thumbnail: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800",
+    component: IndianRoyalWeddingTemplate,
+    price: 999
+  },
+  {
+    id: "royal",
+    name: "Grand Manor",
+    category: "classic",
+    thumbnail: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800",
+    component: IndianRoyalWeddingTemplate,
+    price: 999
+  },
+  {
+    id: "beach",
+    name: "Coastal Bliss",
+    category: "modern",
+    thumbnail: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800",
+    component: KonaseemaWeddingTemplate,
+    price: 999
+  },
+  {
     id: "konaseema",
     name: "Konaseema Heritage",
     category: "classic",

@@ -13,8 +13,24 @@ import toast from "react-hot-toast";
 export default function Pricing() {
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [minimalPrice, setMinimalPrice] = useState(499);
 
   useEffect(() => {
+    async function loadPrice() {
+      try {
+        const { getDoc, doc } = await import("firebase/firestore");
+        const { db } = await import("../lib/firebase");
+        const snap = await getDoc(doc(db, "templates", "minimal"));
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.publishPrice) setMinimalPrice(Number(data.publishPrice));
+        }
+      } catch (e) {
+        console.error("Failed to load minimal price:", e);
+      }
+    }
+    loadPrice();
+
     // Load Razorpay script
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -138,7 +154,7 @@ export default function Pricing() {
           <div className="mb-10 text-center">
             <h3 className="font-serif italic text-3xl mb-2">Premium Plan</h3>
             <div className="flex items-baseline justify-center gap-2">
-              <span className="text-5xl font-bold text-editorial-ink">₹499</span>
+              <span className="text-5xl font-bold text-editorial-ink">₹{minimalPrice}</span>
               <span className="text-sm text-editorial-muted font-bold uppercase tracking-widest">/ one-time</span>
             </div>
           </div>

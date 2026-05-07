@@ -11,11 +11,11 @@ export default async function handler(req, res) {
   }
 
   try {
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    const bucket = process.env.R2_BUCKET;
-    const endpoint = process.env.R2_ENDPOINT;
+    const accountId = process.env.R2_ACCOUNT_ID?.trim().replace(/^["'](.+)["']$/, "$1");
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim().replace(/^["'](.+)["']$/, "$1");
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim().replace(/^["'](.+)["']$/, "$1");
+    const bucket = process.env.R2_BUCKET?.trim().replace(/^["'](.+)["']$/, "$1");
+    const endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1");
 
     if (!accountId || !accessKeyId || !secretAccessKey || !bucket || !endpoint) {
       return res.status(500).json({ error: "Missing R2 configuration environment variables" });

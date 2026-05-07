@@ -11,11 +11,15 @@ import {
   signInAnonymously,
   signOut,
 } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 import firebaseConfig from "../../firebase-applet-config.json";
 
 // ─── App Init ────────────────────────────────────────────────────────────────
 
 const app = initializeApp(firebaseConfig);
+
+// ─── Firestore ────────────────────────────────────────────────────────────────
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 

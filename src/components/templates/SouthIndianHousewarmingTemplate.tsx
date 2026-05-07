@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { TraditionalDoor } from './DoorAnimation';
 import { GaneshSymbol, FloralArch } from './HousewarmingDecorations';
 import MapPreview from '../MapPreview';
+import TemplateImage from '../TemplateImage';
 
 interface HousewarmingTemplateProps {
   title?: string;
@@ -22,11 +23,13 @@ interface HousewarmingTemplateProps {
   image?: string;
   galleryImages?: string[];
   enableEnvelope?: boolean;
-  events?: { name: string; date: string; time: string; location: string }[];
+  events?: { name: string; date: string; time: string; location: string; image?: string | any }[];
   googleMapsEmbedUrl?: string;
   googleMapsLink?: string;
   coordinates?: string;
   venueAddress?: string;
+  isEditable?: boolean;
+  onImageEdit?: (target: string, index?: number) => void;
 }
 
 export default function SouthIndianHousewarmingTemplate({
@@ -49,6 +52,8 @@ export default function SouthIndianHousewarmingTemplate({
   googleMapsLink = "",
   coordinates = "",
   venueAddress = "",
+  isEditable = false,
+  onImageEdit,
 }: HousewarmingTemplateProps) {
   const [isOpenedManual, setIsOpenedManual] = useState(false);
   
@@ -144,7 +149,16 @@ export default function SouthIndianHousewarmingTemplate({
 
             <div className="w-full my-6 flex flex-col gap-6 animate-fade-in-up [animation-delay:2.3s]">
               {displayEvents.map((event, idx) => (
-                <div key={idx} className="bg-white/60 backdrop-blur-sm border border-amber-200 shadow-sm rounded-xl p-4 relative">
+                <div key={idx} className="bg-white/60 backdrop-blur-sm border border-amber-200 shadow-sm rounded-xl p-4 relative overflow-hidden">
+                  <div className="w-full aspect-video rounded-lg overflow-hidden mb-4 shadow-sm border border-amber-100">
+                    <TemplateImage
+                      image={event.image}
+                      alt={event.name}
+                      className="w-full h-full"
+                      isEditable={isEditable}
+                      onEdit={() => onImageEdit?.("event", idx)}
+                    />
+                  </div>
                   <div className="flex items-center justify-center gap-3 mb-2">
                      <span className="h-px w-8 bg-amber-400"></span>
                      <h3 className="text-base sm:text-xl font-bold text-red-900">{event.name}: {event.date}</h3>
@@ -188,15 +202,17 @@ export default function SouthIndianHousewarmingTemplate({
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {galleryImages.map((img, idx) => (
+                  {galleryImages.map((img: any, idx: number) => (
                     <div 
                       key={idx} 
                       className="group relative aspect-[4/3] rounded-2xl overflow-hidden border-4 border-white shadow-lg transform transition-all duration-500 hover:scale-[1.02] hover:shadow-2xl"
                     >
-                      <img 
-                        src={img} 
+                      <TemplateImage 
+                        image={img} 
                         alt={`Gallery ${idx + 1}`}
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        className="w-full h-full transition-transform duration-700 group-hover:scale-110"
+                        isEditable={isEditable}
+                        onEdit={() => onImageEdit?.("gallery", idx)}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-red-900/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                       
@@ -236,24 +252,13 @@ export default function SouthIndianHousewarmingTemplate({
              <div className="absolute inset-0 bg-amber-50/20 pointer-events-none z-15" />
 
              <div className="absolute inset-0 z-10 overflow-hidden flex items-end justify-center">
-               {image && image !== "" ? (
-                 <img 
-                   src={image} 
-                   alt="South Indian Housewarming Scene" 
-                   className="w-full h-full object-cover object-bottom animate-scale-in"
-                   onError={(e: any) => {
-                     e.target.onerror = null; 
-                     e.target.style.display = 'none';
-                     const fallback = e.target.parentElement.nextElementSibling;
-                     if (fallback) fallback.classList.remove('hidden');
-                   }}
-                 />
-               ) : (
-                 <div className="w-full h-full flex flex-col items-center justify-center bg-amber-100/50 p-8 text-center">
-                    <p className="text-red-900 font-bold italic text-lg">No Main Image Added</p>
-                    <p className="text-amber-800 text-sm mt-2 font-medium">Please upload a photo in the builder to see it here.</p>
-                 </div>
-               )}
+               <TemplateImage 
+                 image={image} 
+                 alt="South Indian Housewarming Scene" 
+                 className="w-full h-full object-bottom"
+                 isEditable={isEditable}
+                 onEdit={() => onImageEdit?.("cover")}
+               />
              </div>
              
              {/* Fallback Message */}

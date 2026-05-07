@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    const form = formidable({ maxFileSize: 5 * 1024 * 1024 });
+    const form = formidable({ maxFileSize: 10 * 1024 * 1024 });
     const [fields, files] = await form.parse(req as any);
 
     const file = Array.isArray(files.file) ? files.file[0] : files.file;
@@ -31,11 +31,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ success: false, error: "userId and inviteId required" });
     }
 
-    const endpoint = process.env.R2_ENDPOINT;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    const bucket = process.env.R2_BUCKET;
-    const publicUrl = process.env.R2_PUBLIC_URL;
+    const endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1");
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim().replace(/^["'](.+)["']$/, "$1");
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim().replace(/^["'](.+)["']$/, "$1");
+    const bucket = process.env.R2_BUCKET?.trim().replace(/^["'](.+)["']$/, "$1");
+    const publicUrl = process.env.R2_PUBLIC_URL?.trim().replace(/^["'](.+)["']$/, "$1");
 
     console.log("R2 ENV CHECK:", {
       hasEndpoint: !!endpoint,

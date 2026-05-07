@@ -4,9 +4,6 @@
  */
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { useEffect } from "react";
-import { auth } from "./lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
@@ -17,38 +14,66 @@ import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import Pricing from "./pages/Pricing";
 import TemplatesPage from "./pages/Templates";
-
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import { Toaster } from "react-hot-toast";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Toaster position="top-center" />
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="login" element={<Login />} />
-          <Route path="pricing" element={<Pricing />} />
-          <Route path="templates" element={<TemplatesPage />} />
-          
-          {/* Protected Routes (Logic inside components) */}
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="builder" element={<Builder />} />
-          <Route path="builder/:templateId" element={<Builder />} />
-          <Route path="builder/edit/:inviteId" element={<Builder />} />
-          <Route path="preview/:slug" element={<Preview />} />
-          <Route path="admin" element={<Admin />} />
-        </Route>
+    <AuthProvider>
+      <BrowserRouter>
+        <Toaster position="top-center" />
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="login" element={<Login />} />
+            <Route path="pricing" element={<Pricing />} />
+            <Route path="templates" element={<TemplatesPage />} />
 
-        {/* Live Site Routes (No shared layout) */}
-        <Route path="/invite/:id" element={<Site />} />
-        <Route path="/site/:id" element={<Site />} />
-        <Route path="/wedding/:id" element={<Site />} />
+            <Route path="dashboard" element={
+              <ProtectedRoute>
+                <Dashboard />
+              </ProtectedRoute>
+            } />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+            <Route path="builder" element={
+              <ProtectedRoute>
+                <Builder />
+              </ProtectedRoute>
+            } />
+
+            <Route path="builder/:templateId" element={
+              <ProtectedRoute>
+                <Builder />
+              </ProtectedRoute>
+            } />
+
+            <Route path="builder/edit/:inviteId" element={
+              <ProtectedRoute>
+                <Builder />
+              </ProtectedRoute>
+            } />
+
+            <Route path="preview/:slug" element={
+              <ProtectedRoute>
+                <Preview />
+              </ProtectedRoute>
+            } />
+
+            <Route path="admin" element={
+              <ProtectedRoute requireAdmin={true}>
+                <Admin />
+              </ProtectedRoute>
+            } />
+          </Route>
+
+          <Route path="/invite/:id" element={<Site />} />
+          <Route path="/site/:id" element={<Site />} />
+          <Route path="/wedding/:id" element={<Site />} />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

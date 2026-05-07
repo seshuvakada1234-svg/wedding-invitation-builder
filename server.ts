@@ -18,8 +18,6 @@ import crypto from "crypto";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import multer from "multer";
-
 // ─── Auth Token Verification (Helper already in src/lib/auth.ts) ────────────
 
 function getAdminDb() {
@@ -65,19 +63,19 @@ let r2: S3Client | null = null;
 
 function getR2Client() {
   if (!r2) {
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-    const endpoint = process.env.R2_ENDPOINT;
+    const accountId = process.env.R2_ACCOUNT_ID?.trim().replace(/^["'](.+)["']$/, "$1");
+    const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim().replace(/^["'](.+)["']$/, "$1");
+    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim().replace(/^["'](.+)["']$/, "$1");
+    const endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1");
 
     if (!accountId || !accessKeyId || !secretAccessKey || !endpoint) {
-      console.warn("R2 Environment variables missing:", {
+      console.warn("R2 Environment variables missing or invalid:", {
         accountId: !!accountId,
         accessKeyId: !!accessKeyId,
         secretAccessKey: !!secretAccessKey,
         endpoint: !!endpoint,
       });
-      throw new Error("Missing R2 configuration.");
+      throw new Error("Missing or invalid R2 configuration.");
     }
 
     r2 = new S3Client({
@@ -109,12 +107,6 @@ function serializeFirestoreData(data: Record<string, any>) {
 
 // ─── Server ──────────────────────────────────────────────────────────────────
 
-// ─── Multer Init ────────────────────────────────────────────────────────────
-const upload = multer({
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-  storage: multer.memoryStorage(),
-});
-
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -127,15 +119,24 @@ async function startServer() {
     next();
   });
 
-  // ── Upload handler (BEFORE other body parsers) ─────────────────────────────
-  app.post("/api/upload", upload.single("file"), async (req, res) => {
+  // ── Upload handler (using formidable) ───────────────────────────────────
+  app.post("/api/upload", async (req, res) => {
+    console.log("POST /api/upload started");
     try {
-      const file = req.file;
-      const { userId, inviteId } = req.body;
+      const form = formidable({
+        maxFileSize: 10 * 1024 * 1024,
+        allowEmptyFiles: false,
+      });
 
+      const [fields, files] = await form.parse(req);
+      
+      const file = Array.isArray(files.file) ? files.file[0] : files.file;
       if (!file) {
         return res.status(400).json({ success: false, error: "No file uploaded" });
       }
+
+      const userId = Array.isArray(fields.userId) ? fields.userId[0] : fields.userId;
+      const inviteId = Array.isArray(fields.inviteId) ? fields.inviteId[0] : fields.inviteId;
 
       if (!userId || !inviteId) {
         return res.status(400).json({ success: false, error: "userId and inviteId are required" });
@@ -143,26 +144,31 @@ async function startServer() {
 
       const client = getR2Client();
       const timestamp = Date.now();
-      const sanitizedFileName = file.originalname.replace(/[^a-z0-9.]/gi, "_").toLowerCase();
+      const originalFileName = file.originalFilename || "image.jpeg";
+      const sanitizedFileName = originalFileName.replace(/[^a-z0-9.]/gi, "_").toLowerCase();
       const fileName = `users/${userId}/${inviteId}/${timestamp}-${sanitizedFileName}`;
 
-      const bucketName = process.env.R2_BUCKET;
-      const publicUrl = process.env.R2_PUBLIC_URL;
+      const bucketName = process.env.R2_BUCKET?.trim().replace(/^["'](.+)["']$/, "$1");
+      const publicUrl = process.env.R2_PUBLIC_URL?.trim().replace(/^["'](.+)["']$/, "$1");
 
       if (!bucketName) throw new Error("Missing R2_BUCKET configuration.");
+
+      const fileBuffer = fs.readFileSync(file.filepath);
 
       await client.send(
         new PutObjectCommand({
           Bucket: bucketName,
           Key: fileName,
-          Body: file.buffer,
+          Body: fileBuffer,
           ContentType: file.mimetype || "image/jpeg",
         })
       );
+      
       const url = publicUrl
         ? `${publicUrl.endsWith("/") ? publicUrl.slice(0, -1) : publicUrl}/${fileName}`
-        : `${process.env.R2_ENDPOINT}/${bucketName}/${fileName}`;
+        : `${process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1")}/${bucketName}/${fileName}`;
 
+      console.log("Upload success:", url);
       return res.json({ success: true, url, key: fileName });
     } catch (error: any) {
       console.error("DEBUG: Upload failed:", error);
@@ -441,7 +447,7 @@ async function startServer() {
         });
       }
 
-      const TEMPLATE_PRICES: Record<string, number> = {
+      const DEFAULT_PRICES: Record<string, number> = {
         "minimal": 49900,
         "housewarming-south": 79900,
         "kerala-wedding": 79900,
@@ -451,8 +457,25 @@ async function startServer() {
         "all_access": 199900,
       };
       
-      // Default to 49900 (₹499) if no templateId provided (matches Pricing.tsx base plan)
-      const amount = TEMPLATE_PRICES[templateId] || 49900;
+      let amount = DEFAULT_PRICES[templateId] || 49900;
+
+      // ✅ Fetch dynamic price from Firestore
+      try {
+        const db = getAdminDb();
+        if (db) {
+          const templateDoc = await db.collection("templates").doc(templateId).get();
+          if (templateDoc.exists) {
+            const data = templateDoc.data();
+            if (data?.publishPrice) {
+              amount = Math.round(Number(data.publishPrice) * 100);
+              console.log(`Dynamic price fetched for ${templateId}: ${amount} paise`);
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.error("Error fetching dynamic price from Firestore:", dbErr);
+        // Continue with default amount
+      }
 
       const order = await rp.orders.create({
         amount,
@@ -538,6 +561,8 @@ async function startServer() {
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
         };
 
+        let paymentAmount = 499; // Default factor
+
         if (templateId) {
           const normId = templateId.toString().toLowerCase().trim();
           updateData[`paidTemplates.${normId}`] = true;
@@ -545,6 +570,14 @@ async function startServer() {
           if (normId !== templateId) {
             updateData[`paidTemplates.${templateId}`] = true;
           }
+
+          if (normId === "minimal") paymentAmount = 499;
+          else if (normId === "housewarming-south") paymentAmount = 799;
+          else if (normId === "kerala-wedding") paymentAmount = 799;
+          else if (normId === "konaseema") paymentAmount = 999;
+          else if (normId === "kerala-envelope-reveal") paymentAmount = 1299;
+          else if (normId === "royal-wedding") paymentAmount = 1499;
+          else if (normId === "all_access") paymentAmount = 1999;
 
           if (normId === "minimal" || normId === "all_access" || normId === "premium") {
             updateData.paid = true;
@@ -554,6 +587,19 @@ async function startServer() {
         }
 
         await userRef.update(updateData);
+
+        // ✅ Create detailed payment record for analytics
+        await db.collection("payments").add({
+          userId: confirmedUserId,
+          email: email || null,
+          templateId: templateId || "minimal",
+          amount: paymentAmount,
+          status: "paid",
+          razorpayPaymentId: razorpay_payment_id,
+          razorpayOrderId: razorpay_order_id,
+          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+
         console.log("Payment verified and saved for user:", confirmedUserId, "Template:", templateId);
       }
 

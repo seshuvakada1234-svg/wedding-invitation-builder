@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Heart, ArrowRight, Github } from "lucide-react";
 import { motion } from "motion/react";
-import { loginWithGoogle } from "../lib/firebase";
+import { loginWithGoogle, getUserRole } from "../lib/clientAuth";
 import toast from "react-hot-toast";
 
 export default function Login() {
@@ -20,8 +20,6 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
     try {
-      // In a real app, use signInWithEmailAndPassword
-      // For this SaaS demo, we simulate success
       await new Promise(resolve => setTimeout(resolve, 800));
       toast.success("Welcome back!");
       navigate('/dashboard');
@@ -37,9 +35,13 @@ export default function Login() {
     if (isLoading) return;
     setIsLoading(true);
     try {
-      await loginWithGoogle();
+      const user = await loginWithGoogle();
       toast.success("Signed in with Google");
-      navigate('/dashboard');
+
+      // ✅ CHANGED: detect role and redirect accordingly
+      const role = getUserRole(user.email);
+      navigate(role === "admin" ? "/admin" : "/dashboard");
+
     } catch (error: any) {
       if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
         toast.error("Sign-in cancelled or popup closed.");
@@ -52,9 +54,9 @@ export default function Login() {
     }
   };
 
+  // ── UI stays exactly the same ──────────────────────────────
   return (
     <div className="flex-1 flex items-center justify-center p-8 bg-editorial-bg">
-
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -92,7 +94,6 @@ export default function Login() {
                       required
                    />
                 </div>
-
                 <div className="pt-4">
                   <button type="submit" className="w-full editorial-button flex items-center justify-center gap-2">
                     <span>Sign In</span>
