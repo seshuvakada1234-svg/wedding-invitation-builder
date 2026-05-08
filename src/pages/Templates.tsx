@@ -3,13 +3,31 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { templates } from "../templates";
+import { templates as staticTemplates } from "../templates";
 import { Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
+import { db } from "../lib/firebase";
+import { collection, onSnapshot } from "firebase/firestore";
 
 export default function TemplatesPage() {
   const navigate = useNavigate();
+  const [prices, setPrices] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "templates"), (snap) => {
+      const newPrices: Record<string, number> = {};
+      snap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.publishPrice) {
+          newPrices[doc.id] = Number(data.publishPrice);
+        }
+      });
+      setPrices(newPrices);
+    });
+    return () => unsub();
+  }, []);
 
   return (
     <div className="min-h-screen py-20 px-6 lg:px-8 max-w-6xl mx-auto w-full">
@@ -33,7 +51,7 @@ export default function TemplatesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-        {templates.map((tpl, i) => (
+        {staticTemplates.map((tpl, i) => (
           <motion.div
             key={tpl.id}
             initial={{ opacity: 0, y: 20 }}
@@ -58,7 +76,7 @@ export default function TemplatesPage() {
             <div className="flex justify-between items-start">
                <div>
                  <h2 className="text-xl font-serif italic mb-1">{tpl.name}</h2>
-                 <p className="text-[10px] uppercase font-bold tracking-widest text-editorial-muted">₹{tpl.price} One-time activation</p>
+                 <p className="text-[10px] uppercase font-bold tracking-widest text-editorial-muted">₹{prices[tpl.id] ?? tpl.price} One-time activation</p>
                </div>
                <button 
                  onClick={() => navigate(`/builder/${tpl.id}`)}

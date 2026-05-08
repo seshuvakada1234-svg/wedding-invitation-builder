@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Search, Check, X, Loader2,
   Users, Globe, CreditCard, Image, Layout, Trash2,
@@ -34,11 +34,15 @@ interface Stats {
 }
 
 const TEMPLATES = [
-  { id: "kerala",        label: "Kerala Wedding" },
-  { id: "konaseema",     label: "Konaseema Wedding" },
-  { id: "indian-royal",  label: "Indian Royal" },
-  { id: "kerala-reveal", label: "Kerala Reveal" },
-  { id: "south-indian",  label: "South Indian Housewarming" },
+  { id: "minimal",                label: "Minimal Royal" },
+  { id: "royal-wedding",          label: "Indian Royal Wedding" },
+  { id: "royal",                  label: "Grand Manor" },
+  { id: "beach",                  label: "Coastal Bliss" },
+  { id: "konaseema",              label: "Konaseema Heritage" },
+  { id: "kerala-wedding",         label: "Kerala Wedding" },
+  { id: "kerala-envelope-reveal", label: "Kerala Envelope Reveal" },
+  { id: "housewarming-south",     label: "South Indian Housewarming" },
+  { id: "all_access",             label: "All Access Pass" },
 ];
 
 // ✅ Smart date formatter
@@ -76,75 +80,138 @@ export default function Admin() {
     activeWebsites: 0,
   });
 
+  const [prices, setPrices]   = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const [saving, setSaving]   = useState<string | null>(null);
+
+  const unsubs = useRef<(() => void)[]>([]);
+
+  async function fetchAllInvites() {
+    // We rely on onSnapshot for the list, so this just marks loading as done 
+    // or we can keep it if we want to ensure initial load
+    setLoading(false);
+  }
+
+  async function loadPrices() {
+    try {
+      const defaults: Record<string, string> = {};
+      TEMPLATES.forEach((t) => { defaults[t.id] = "499"; });
+
+      const promises = TEMPLATES.map(t => getDoc(doc(db, "templates", t.id)));
+      const snaps = await Promise.all(promises);
+
+      snaps.forEach((snap, idx) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          defaults[TEMPLATES[idx].id] = data.publishPrice?.toString() ?? "499";
+        }
+      });
+
+      setPrices(defaults);
+    } catch (e) {
+      console.error("Failed to load prices", e);
+    }
+  }
+
+  async function savePrice(templateId: string) {
+    if (!prices[templateId] || isNaN(Number(prices[templateId]))) {
+      toast.error("Please enter a valid price");
+      return;
+    }
+
+    setSaving(templateId);
+    try {
+      const templateRef = doc(db, "templates", templateId);
+      const templateData = {
+        id: templateId,
+        publishPrice: Number(prices[templateId]),
+        updatedAt: new Date(),
+        enabled: true
+      };
+
+      await setDoc(templateRef, templateData, { merge: true });
+      
+      toast.success(`✅ Price updated for ${templateId}`);
+      setEditing(null);
+    } catch (e: any) {
+      console.error("Error saving price:", e);
+      toast.error(e.message || "Failed to save price");
+    } finally {
+      setSaving(null);
+    }
+  }
+
   useEffect(() => {
     const unsubAuth = auth.onAuthStateChanged((user) => {
-      if (user) fetchAllInvites();
-      else setLoading(false);
+      // Clear previous listeners
+      unsubs.current.forEach(u => u());
+      unsubs.current = [];
+
+      if (user) {
+        fetchAllInvites();
+        loadPrices();
+        
+        // 1. Live Users Count
+        const u1 = onSnapshot(collection(db, "users"), (snap) => {
+          setLiveStats(prev => ({ ...prev, totalUsers: snap.size }));
+        }, (err) => console.error("Users listener error:", err));
+        unsubs.current.push(u1);
+
+        // 2. Live Invites & Active Websites
+        const u2 = onSnapshot(collection(db, "invites"), (snap) => {
+          const docs = snap.docs.map(d => d.data());
+          setLiveStats(prev => ({
+            ...prev,
+            totalInvites: snap.size,
+            activeWebsites: docs.filter(d => d.isPaid === true).length
+          }));
+          
+          const invitesList = snap.docs.map(d => ({ id: d.id, ...d.data() } as WeddingInvite));
+          setInvites(invitesList.sort((a, b) => {
+            const getTs = (val: any) => {
+              if (!val) return 0;
+              if (val && typeof val === "object" && "toDate" in val) return val.toDate().getTime();
+              const d = new Date(val);
+              return isNaN(d.getTime()) ? 0 : d.getTime();
+            };
+            return getTs(b.updatedAt) - getTs(a.updatedAt);
+          }));
+        }, (err) => console.error("Invites listener error:", err));
+        unsubs.current.push(u2);
+
+        // 3. Live Revenue & Payments History
+        const qPayments = query(collection(db, "payments"), where("status", "==", "paid"));
+        const u3 = onSnapshot(qPayments, (snap) => {
+          const revenue = snap.docs.reduce((sum, doc) => {
+            const data = doc.data();
+            return sum + (Number(data.amount) || 0);
+          }, 0);
+          setLiveStats(prev => ({ ...prev, totalRevenue: revenue }));
+          
+          const paymentsList = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          setPayments(paymentsList.sort((a, b) => {
+            const getTs = (val: any) => {
+              if (!val) return 0;
+              if (val && typeof val === "object" && "toDate" in val) return val.toDate().getTime();
+              const d = new Date(val);
+              return isNaN(d.getTime()) ? 0 : d.getTime();
+            };
+            return getTs(b.createdAt) - getTs(a.createdAt);
+          }));
+        }, (err) => console.error("Payments listener error:", err));
+        unsubs.current.push(u3);
+
+      } else {
+        setLoading(false);
+      }
     });
-
-    // 1. Live Users Count
-    const unsubUsers = onSnapshot(collection(db, "users"), (snap) => {
-      setLiveStats(prev => ({ ...prev, totalUsers: snap.size }));
-    }, (err) => console.error("Users listener error:", err));
-
-    // 2. Live Invites & Active Websites
-    const unsubInvites = onSnapshot(collection(db, "invites"), (snap) => {
-      const docs = snap.docs.map(d => d.data());
-      setLiveStats(prev => ({
-        ...prev,
-        totalInvites: snap.size,
-        activeWebsites: docs.filter(d => d.isPaid === true).length
-      }));
-      
-      // Also update the local invites list for tables if we want it real-time
-      const invitesList = snap.docs.map(d => ({ id: d.id, ...d.data() } as WeddingInvite));
-      setInvites(invitesList.sort((a, b) => {
-        const getTs = (val: any) => {
-          if (!val) return 0;
-          if (val && typeof val === "object" && "toDate" in val) return val.toDate().getTime();
-          const d = new Date(val);
-          return isNaN(d.getTime()) ? 0 : d.getTime();
-        };
-        return getTs(b.updatedAt) - getTs(a.updatedAt);
-      }));
-    }, (err) => console.error("Invites listener error:", err));
-
-    // 3. Live Revenue & Payments History
-    const qPayments = query(collection(db, "payments"), where("status", "==", "paid"));
-    const unsubPayments = onSnapshot(qPayments, (snap) => {
-      const revenue = snap.docs.reduce((sum, doc) => {
-        const data = doc.data();
-        return sum + (Number(data.amount) || 0);
-      }, 0);
-      setLiveStats(prev => ({ ...prev, totalRevenue: revenue }));
-      
-      // Update payments list
-      const paymentsList = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
-      setPayments(paymentsList.sort((a, b) => {
-        const getTs = (val: any) => {
-          if (!val) return 0;
-          if (val && typeof val === "object" && "toDate" in val) return val.toDate().getTime();
-          const d = new Date(val);
-          return isNaN(d.getTime()) ? 0 : d.getTime();
-        };
-        return getTs(b.createdAt) - getTs(a.createdAt);
-      }));
-    }, (err) => console.error("Payments listener error:", err));
 
     return () => {
       unsubAuth();
-      unsubUsers();
-      unsubInvites();
-      unsubPayments();
+      unsubs.current.forEach(u => u());
     };
   }, []);
 
-  async function fetchAllInvites() {
-    // We already have internal onSnapshot updating the list, so we could skip this 
-    // but keeping it for the initial load if needed, or we can just rely on onSnapshot.
-    // Let's rely on onSnapshot as it's better.
-    setLoading(false);
-  }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this invitation permanently?")) return;
@@ -428,7 +495,15 @@ export default function Admin() {
 
           {/* ── TEMPLATES ── */}
           {tab === "templates" && (
-            <TemplatesManager invites={invites} />
+            <TemplatesManager 
+              invites={invites} 
+              prices={prices}
+              setPrices={setPrices}
+              editing={editing}
+              setEditing={setEditing}
+              saving={saving}
+              onSavePrice={savePrice}
+            />
           )}
 
         </div>
@@ -534,100 +609,59 @@ function InviteTable({
 }
 
 /* ── Templates Manager with Price Editor ── */
-function TemplatesManager({ invites }: { invites: WeddingInvite[] }) {
-  const [prices, setPrices]   = useState<Record<string, string>>({});
-  const [editing, setEditing] = useState<string | null>(null);
-  const [saving, setSaving]   = useState<string | null>(null);
-
-  // Load prices from Firestore on mount
-  useEffect(() => {
-    async function loadPrices() {
-      try {
-        const defaults: Record<string, string> = {};
-        TEMPLATES.forEach((t) => { defaults[t.id] = "499"; });
-
-        // Fetch each template document
-        const promises = TEMPLATES.map(t => getDoc(doc(db, "templates", t.id)));
-        const snaps = await Promise.all(promises);
-
-        snaps.forEach((snap, idx) => {
-          if (snap.exists()) {
-            const data = snap.data();
-            defaults[TEMPLATES[idx].id] = data.publishPrice?.toString() ?? "499";
-          }
-        });
-
-        setPrices(defaults);
-      } catch (e) {
-        console.error("Failed to load prices", e);
-      }
-    }
-    loadPrices();
-  }, []);
-
-  async function savePrice(templateId: string) {
-    if (!prices[templateId] || isNaN(Number(prices[templateId]))) {
-      toast.error("Please enter a valid price");
-      return;
-    }
-
-    setSaving(templateId);
-    try {
-      const templateRef = doc(db, "templates", templateId);
-      const templateData = {
-        id: templateId,
-        publishPrice: Number(prices[templateId]),
-        updatedAt: new Date(),
-        enabled: true
-      };
-
-      await setDoc(templateRef, templateData, { merge: true });
-      
-      toast.success(`✅ Price updated for ${templateId}`);
-      setEditing(null);
-    } catch (e: any) {
-      console.error("Error saving price:", e);
-      toast.error(e.message || "Failed to save price");
-    } finally {
-      setSaving(null);
-    }
-  }
-
+function TemplatesManager({ 
+  invites,
+  prices,
+  setPrices,
+  editing,
+  setEditing,
+  saving,
+  onSavePrice
+}: { 
+  invites: WeddingInvite[];
+  prices: Record<string, string>;
+  setPrices: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  editing: string | null;
+  setEditing: React.Dispatch<React.SetStateAction<string | null>>;
+  saving: string | null;
+  onSavePrice: (id: string) => Promise<void>;
+}) {
   return (
     <div className="space-y-6">
-      <p className="text-sm text-editorial-muted">
+      <p className="text-sm text-editorial-muted text-center max-w-2xl mx-auto">
         Set publish price per template. Saved to Firestore — applies immediately at checkout.
       </p>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {TEMPLATES.map((tmpl) => {
           const count     = invites.filter((i) => i.template === tmpl.id).length;
           const isEditing = editing === tmpl.id;
           const isSaving  = saving  === tmpl.id;
 
           return (
-            <div key={tmpl.id} className="editorial-card bg-white p-6">
-              {/* Header */}
-              <div className="flex items-center justify-between mb-4">
+            <div key={tmpl.id} className="editorial-card bg-white p-6 hover:shadow-xl transition-all duration-300">
+              <div className="flex items-center justify-between mb-6">
                 <span className="text-xs font-bold uppercase tracking-widest text-editorial-muted">
                   {tmpl.label}
                 </span>
-                <Layout className="w-4 h-4 text-editorial-accent" />
+                <div className="p-2 rounded-full bg-editorial-bg">
+                  <Layout className="w-4 h-4 text-editorial-accent" />
+                </div>
               </div>
 
-              {/* Active uses */}
-              <p className="text-2xl font-serif italic mb-1">{count}</p>
-              <p className="text-[10px] text-editorial-muted uppercase tracking-widest mb-4">
-                active uses
-              </p>
+              <div className="flex items-baseline gap-2 mb-6">
+                <p className="text-4xl font-serif italic">{count}</p>
+                <p className="text-[10px] text-editorial-muted uppercase tracking-widest font-bold">
+                  active uses
+                </p>
+              </div>
 
-              {/* ✅ Price editor */}
-              <div className="mb-4">
-                <p className="text-[10px] uppercase tracking-widest font-bold text-editorial-muted mb-1.5">
+              <div className="pt-6 border-t border-editorial-border">
+                <p className="text-[10px] uppercase tracking-widest font-bold text-editorial-muted mb-2">
                   Publish Price
                 </p>
                 {isEditing ? (
-                  <div className="flex items-center gap-1 border border-editorial-accent rounded px-2 py-1.5">
-                    <span className="text-sm font-bold text-editorial-muted">₹</span>
+                  <div className="flex items-center gap-2 border border-editorial-accent rounded-lg px-3 py-2 bg-editorial-bg shadow-inner">
+                    <span className="text-lg font-bold text-editorial-muted">₹</span>
                     <input
                       type="number"
                       min="0"
@@ -635,31 +669,30 @@ function TemplatesManager({ invites }: { invites: WeddingInvite[] }) {
                       onChange={(e) =>
                         setPrices((prev) => ({ ...prev, [tmpl.id]: e.target.value }))
                       }
-                      className="w-full text-sm font-bold focus:outline-none"
+                      className="w-full text-lg font-serif focus:outline-none bg-transparent"
                       autoFocus
                     />
                   </div>
                 ) : (
-                  <p className="text-2xl font-serif italic text-editorial-accent">
+                  <p className="text-3xl font-serif italic text-editorial-accent">
                     ₹{prices[tmpl.id] ?? "499"}
                   </p>
                 )}
               </div>
 
-              {/* Buttons */}
-              <div className="flex gap-2">
+              <div className="mt-8 flex gap-3">
                 {isEditing ? (
                   <>
                     <button
-                      onClick={() => savePrice(tmpl.id)}
+                      onClick={() => onSavePrice(tmpl.id)}
                       disabled={isSaving}
-                      className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-editorial-ink text-white rounded hover:opacity-90 transition-all disabled:opacity-50"
+                      className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest bg-editorial-ink text-white rounded-lg hover:bg-black transition-all disabled:opacity-50 shadow-sm"
                     >
-                      {isSaving ? "Saving..." : "Save"}
+                      {isSaving ? "Saving..." : "Save Changes"}
                     </button>
                     <button
                       onClick={() => setEditing(null)}
-                      className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-editorial-border rounded hover:bg-editorial-bg transition-all"
+                      className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-editorial-border rounded-lg hover:bg-editorial-bg transition-all"
                     >
                       Cancel
                     </button>
@@ -668,11 +701,11 @@ function TemplatesManager({ invites }: { invites: WeddingInvite[] }) {
                   <>
                     <button
                       onClick={() => setEditing(tmpl.id)}
-                      className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-editorial-border rounded hover:bg-editorial-bg transition-all"
+                      className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-editorial-border rounded-lg hover:bg-editorial-bg transition-all"
                     >
                       Edit Price
                     </button>
-                    <button className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-widest border border-red-200 text-red-500 rounded hover:bg-red-50 transition-all">
+                    <button className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-red-100 text-red-200 rounded cursor-not-allowed">
                       Disable
                     </button>
                   </>

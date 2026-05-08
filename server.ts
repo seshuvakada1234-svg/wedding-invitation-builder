@@ -562,6 +562,19 @@ async function startServer() {
         };
 
         let paymentAmount = 499; // Default factor
+        
+        // ✅ Fetch dynamic price for analytics
+        try {
+           const templateDoc = await db.collection("templates").doc(templateId).get();
+           if (templateDoc.exists) {
+              const tData = templateDoc.data();
+              if (tData?.publishPrice) {
+                paymentAmount = Number(tData.publishPrice);
+              }
+           }
+        } catch (ePrice) {
+           console.warn("Failed to fetch price for analytics verification:", ePrice);
+        }
 
         if (templateId) {
           const normId = templateId.toString().toLowerCase().trim();
@@ -570,14 +583,6 @@ async function startServer() {
           if (normId !== templateId) {
             updateData[`paidTemplates.${templateId}`] = true;
           }
-
-          if (normId === "minimal") paymentAmount = 499;
-          else if (normId === "housewarming-south") paymentAmount = 799;
-          else if (normId === "kerala-wedding") paymentAmount = 799;
-          else if (normId === "konaseema") paymentAmount = 999;
-          else if (normId === "kerala-envelope-reveal") paymentAmount = 1299;
-          else if (normId === "royal-wedding") paymentAmount = 1499;
-          else if (normId === "all_access") paymentAmount = 1999;
 
           if (normId === "minimal" || normId === "all_access" || normId === "premium") {
             updateData.paid = true;

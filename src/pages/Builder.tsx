@@ -148,15 +148,13 @@ export default function Builder() {
         console.error("Failed to load dynamic prices in Builder:", e);
       }
     }
-    loadDynamicPrices();
-  }, []);
 
-  useEffect(() => {
     // onAuthStateChanged fires once immediately with the persisted user (or null).
-    // Only after this callback runs do we know if a user is signed in.
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setAuthLoading(false);
+      // Load prices once auth state is settled
+      loadDynamicPrices();
     });
 
     // Safety timeout — if Firebase takes > 6 s, stop blocking the UI.

@@ -17,7 +17,13 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email in [
+          "resumepro.ads@gmail.com",
+          "seshuvakada1234@gmail.com"
+        ]
+      );
     }
 
     function isValidId(id) {
@@ -78,6 +84,12 @@ service cloud.firestore {
     // --- Collection: Users ---
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin();
+      allow write: if false; // Managed by Backend Admin SDK
+    }
+
+    // --- Collection: Payments ---
+    match /payments/{paymentId} {
+      allow read: if isAdmin();
       allow write: if false; // Managed by Backend Admin SDK
     }
 
