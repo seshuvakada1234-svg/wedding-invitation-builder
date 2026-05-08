@@ -249,11 +249,12 @@ async function startServer() {
         
         // ✅ Enforce view limits
         const currentViews = data.views || 0;
-        const freeViews = data.freeViews || 500; // default 500
+        const freeViews = data.freeViews || 500;
+        const viewLimit = data.viewLimit || freeViews;
         
-        if (currentViews >= freeViews && req.query.increment === "true") {
-           // Allow returning the data but maybe flag it as exceeded
-           // The frontend should handle showing the "Limit Exceeded" screen
+        if (currentViews >= viewLimit && req.query.increment === "true") {
+           // Flag it as exceeded
+           console.log(`View limit reached for ${id}: ${currentViews}/${viewLimit}`);
            return res.json({ 
              success: true, 
              invite: { id: inviteDoc.id, ...data, limitExceeded: true } 
@@ -470,6 +471,111 @@ async function startServer() {
       res.json({ success: true, paid: false });
     } catch (error: any) {
       console.error("User status error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Create Top-Up Order ────────────────────────────────────────────────────
+  app.post("/api/create-topup-order", async (req, res) => {
+    try {
+      const { inviteId } = req.body;
+      const rp = getRazorpay();
+      if (!rp) return res.status(503).json({ success: false, error: "Razorpay error" });
+
+      const amount = 9900; // ₹99 for 1000 views
+
+      const order = await rp.orders.create({
+        amount,
+        currency: "INR",
+        receipt: `topup_${Date.now()}`,
+      });
+
+      res.json({ success: true, order, amount });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Verify Top-Up Payment ──────────────────────────────────────────────────
+  app.post("/api/verify-topup-payment", async (req, res) => {
+    try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, inviteId } = req.body;
+      const userId = await verifyUser(req);
+      const db = getAdminDb();
+      if (!db) return res.status(503).json({ success: false, error: "DB error" });
+
+      const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim().replace(/^["'](.+)["']$/, "$1");
+      const hmac = crypto.createHmac("sha256", key_secret || "");
+      hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+      if (hmac.digest("hex") !== razorpay_signature) {
+        return res.status(400).json({ success: false, error: "Invalid signature" });
+      }
+
+      const inviteRef = db.collection("invites").doc(inviteId);
+      const inviteSnap = await inviteRef.get();
+      if (!inviteSnap.exists) return res.status(404).json({ success: false, error: "Invite not found" });
+
+      const currentLimit = inviteSnap.data()?.viewLimit || inviteSnap.data()?.freeViews || 500;
+      await inviteRef.update({
+        viewLimit: currentLimit + 1000,
+        limitExceeded: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Create Redeploy Order ──────────────────────────────────────────────────
+  app.post("/api/create-redeploy-order", async (req, res) => {
+    try {
+      const rp = getRazorpay();
+      if (!rp) return res.status(503).json({ success: false, error: "Razorpay error" });
+
+      const amount = 9900; // ₹99 redeploy fee
+
+      const order = await rp.orders.create({
+        amount,
+        currency: "INR",
+        receipt: `redeploy_${Date.now()}`,
+      });
+
+      res.json({ success: true, order, amount });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Verify Redeploy Payment ────────────────────────────────────────────────
+  app.post("/api/verify-redeploy-payment", async (req, res) => {
+    try {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, inviteId } = req.body;
+      const userId = await verifyUser(req);
+      const db = getAdminDb();
+      if (!db) return res.status(503).json({ success: false, error: "DB error" });
+
+      const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim().replace(/^["'](.+)["']$/, "$1");
+      const hmac = crypto.createHmac("sha256", key_secret || "");
+      hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+      if (hmac.digest("hex") !== razorpay_signature) {
+        return res.status(400).json({ success: false, error: "Invalid signature" });
+      }
+
+      const inviteRef = db.collection("invites").doc(inviteId);
+      const inviteSnap = await inviteRef.get();
+      if (!inviteSnap.exists) return res.status(404).json({ success: false, error: "Invite not found" });
+
+      await inviteRef.update({
+        hasUnpublishedChanges: false,
+        lastPublishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        redeployCount: admin.firestore.FieldValue.increment(1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
   });

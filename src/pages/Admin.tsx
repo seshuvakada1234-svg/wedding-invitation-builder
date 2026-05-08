@@ -94,16 +94,21 @@ export default function Admin() {
 
   async function loadPrices() {
     try {
+      const { templates: staticTemplates } = await import("../templates");
       const defaults: Record<string, string> = {};
-      TEMPLATES.forEach((t) => { defaults[t.id] = "499"; });
+      staticTemplates.forEach((t) => { 
+        defaults[t.id] = t.price.toString(); 
+      });
 
-      const promises = TEMPLATES.map(t => getDoc(doc(db, "templates", t.id)));
+      const promises = staticTemplates.map(t => getDoc(doc(db, "templates", t.id)));
       const snaps = await Promise.all(promises);
 
       snaps.forEach((snap, idx) => {
         if (snap.exists()) {
           const data = snap.data();
-          defaults[TEMPLATES[idx].id] = data.publishPrice?.toString() ?? "499";
+          if (data.publishPrice) {
+            defaults[staticTemplates[idx].id] = data.publishPrice.toString();
+          }
         }
       });
 

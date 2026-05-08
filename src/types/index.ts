@@ -58,6 +58,9 @@ export interface WeddingInvite {
   freeViews?: number;
   templatePrice?: number;
   limitExceeded?: boolean;
+  hasUnpublishedChanges?: boolean;
+  lastPublishedAt?: string;
+  redeployCount?: number;
   createdAt: string;
   updatedAt: string;
 }

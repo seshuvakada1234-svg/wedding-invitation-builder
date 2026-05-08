@@ -36,6 +36,7 @@ import {
   Rocket,
   Edit2,
   Move,
+  RefreshCcw,
   ZoomIn as ZoomIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -132,8 +133,9 @@ export default function Builder() {
   useEffect(() => {
     async function loadDynamicPrices() {
       try {
-        const templates = ["minimal", "housewarming-south", "kerala-wedding", "konaseema", "kerala-envelope-reveal", "royal-wedding"];
-        const promises = templates.map(t => getDoc(doc(db, "templates", t)));
+        const { templates: staticTemplates } = await import("../templates");
+        const templateIds = staticTemplates.map(t => t.id);
+        const promises = templateIds.map(t => getDoc(doc(db, "templates", t)));
         const snaps = await Promise.all(promises);
         
         const newPrices: Record<string, number> = { ...templatePrices };
@@ -141,7 +143,7 @@ export default function Builder() {
           if (snap.exists()) {
             const data = snap.data();
             if (data.publishPrice) {
-              newPrices[templates[i]] = Number(data.publishPrice);
+              newPrices[templateIds[i]] = Number(data.publishPrice);
             }
           }
         });
@@ -175,18 +177,57 @@ export default function Builder() {
   }, []);
 
   // ── UI state ────────────────────────────────────────────────────────────────
+  const [isFetchingInvite, setIsFetchingInvite] = useState(!!inviteId);
   const [isSaving, setIsSaving] = useState(false);
   const [isCheckingPayment, setIsCheckingPayment] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showPricingModal, setShowPricingModal] = useState(false);
+  const [showRedeployModal, setShowRedeployModal] = useState(false);
   const [showFinalSuccessModal, setShowFinalSuccessModal] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
   const [publishedInviteId, setPublishedInviteId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [viewDevice, setViewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
+  
+  // ── Track changes ──────────────────────────────────────────────────────────
+  const loadedDataRef = useRef<string>("");
+  useEffect(() => {
+    if (!formData.published) return;
+    
+    const currentDataStr = JSON.stringify({
+      brideName: formData.brideName,
+      groomName: formData.groomName,
+      weddingDate: formData.weddingDate,
+      location: formData.location,
+      venueAddress: formData.venueAddress,
+      venueCity: formData.venueCity,
+      googleMapsLink: formData.googleMapsLink,
+      coordinates: formData.coordinates,
+      story: formData.story,
+      events: formData.events,
+      galleryImages: formData.galleryImages,
+      template: formData.template,
+      muhurtham: formData.muhurtham,
+      deity: formData.deity,
+      family: formData.family,
+      eventName: formData.eventName,
+      enable3D: formData.enable3D,
+      enableEnvelope: formData.enableEnvelope
+    });
+
+    if (!loadedDataRef.current && isEditMode) {
+      // Avoid setting ref on initial empty state if we are loading
+      return;
+    }
+
+    if (loadedDataRef.current && loadedDataRef.current !== currentDataStr && !hasUnpublishedChanges) {
+      setHasUnpublishedChanges(true);
+    }
+  }, [formData, hasUnpublishedChanges, isEditMode]);
 
   const [imageEditorConfig, setImageEditorConfig] = useState<{
     isOpen: boolean;
@@ -203,9 +244,16 @@ export default function Builder() {
   // ── Load existing invite ────────────────────────────────────────────────────
   useEffect(() => {
     async function loadInvite() {
-      // FIX: wait for currentUser (not just authLoading) before fetching.
-      if (!inviteId || !currentUser) return;
+      if (!inviteId || !currentUser) {
+        if (inviteId && !currentUser) {
+          // If we have inviteId but no user, wait for auth or redirect
+          return;
+        }
+        setIsFetchingInvite(false);
+        return;
+      }
 
+      setIsFetchingInvite(true);
       try {
         const res = await authFetch(`/api/get-invite?id=${inviteId}`);
         const result = await res.json();
@@ -219,6 +267,29 @@ export default function Builder() {
           }
           setFormData(data);
           setIsEditMode(true);
+          setHasUnpublishedChanges(data.hasUnpublishedChanges || false);
+          
+          // Set initial reference data AFTER loading
+          loadedDataRef.current = JSON.stringify({
+            brideName: data.brideName,
+            groomName: data.groomName,
+            weddingDate: data.weddingDate,
+            location: data.location,
+            venueAddress: data.venueAddress,
+            venueCity: data.venueCity,
+            googleMapsLink: data.googleMapsLink,
+            coordinates: data.coordinates,
+            story: data.story,
+            events: data.events,
+            galleryImages: data.galleryImages,
+            template: data.template,
+            muhurtham: data.muhurtham,
+            deity: data.deity,
+            family: data.family,
+            eventName: data.eventName,
+            enable3D: data.enable3D,
+            enableEnvelope: data.enableEnvelope
+          });
         } else {
           toast.error("Invitation not found.");
           navigate("/dashboard");
@@ -226,6 +297,8 @@ export default function Builder() {
       } catch (err) {
         console.error("Error loading invite:", err);
         toast.error("Failed to load invitation.");
+      } finally {
+        setIsFetchingInvite(false);
       }
     }
 
@@ -235,12 +308,15 @@ export default function Builder() {
   }, [inviteId, authLoading, currentUser, navigate]);
 
   // ── Sync template defaults ──────────────────────────────────────────────────
+  const prevTemplateRef = useRef<string | undefined>(formData.template);
   useEffect(() => {
-    if (currentTemplateId !== formData.template) {
-      const defaultEventNames = TEMPLATE_DEFAULTS[currentTemplateId] || ["Wedding"];
+    // Only sync defaults if the template was actually changed by the user in the editor,
+    // and not during the initial invitation data load.
+    if (!isFetchingInvite && prevTemplateRef.current !== formData.template && formData.template) {
+      const defaultEventNames = TEMPLATE_DEFAULTS[formData.template] || ["Wedding"];
       setFormData((prev) => ({
         ...prev,
-        template: currentTemplateId,
+        galleryImages: GALLERY_DEFAULTS[formData.template || "default"] || GALLERY_DEFAULTS["default"],
         events: defaultEventNames.map((name) => ({
           name,
           date: prev.weddingDate || "TBD",
@@ -249,13 +325,19 @@ export default function Builder() {
         })),
       }));
     }
-  }, [currentTemplateId]);
+    prevTemplateRef.current = formData.template;
+  }, [formData.template, isFetchingInvite]);
 
   // ── Loading screen ──────────────────────────────────────────────────────────
-  if (authLoading) {
+  if (authLoading || isFetchingInvite) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-editorial-bg">
-        <Loader2 className="w-12 h-12 text-editorial-accent animate-spin" />
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 text-editorial-accent animate-spin mx-auto mb-4" />
+          <p className="text-xs uppercase tracking-[0.2em] text-editorial-muted font-bold">
+            {isFetchingInvite ? "Loading Invitation..." : "Preparing Studio..."}
+          </p>
+        </div>
       </div>
     );
   }
@@ -263,7 +345,9 @@ export default function Builder() {
   // ─── Derived values ─────────────────────────────────────────────────────────
   const isHousewarming = formData.template === "housewarming-south";
 
-  const siteSlug =
+  const siteSlug = 
+    formData.slug || 
+    inviteId || 
     (`${formData.groomName?.toLowerCase() || "groom"}-${formData.brideName?.toLowerCase() || "bride"}`)
       .replace(/\s+/g, "-")
       .replace(/[^a-z0-9-]/g, "") || "new-invite";
@@ -548,7 +632,13 @@ export default function Builder() {
       }
 
       let finalizedData = { ...formData };
-      if (isPaid) {
+      
+      // For drafts, we generally don't perform production R2 uploads 
+      // unless it's already published and we are just sync'ing.
+      // But per requirements, R2 upload ONLY happens after payment.
+      const shouldPerformProductionDeploy = false; 
+
+      if (shouldPerformProductionDeploy) {
         finalizedData = await uploadPendingImages(formData);
       }
 
@@ -564,6 +654,7 @@ export default function Builder() {
         email: currentUser.email || "",
         slug: id,
         published: false,
+        hasUnpublishedChanges: hasUnpublishedChanges,
         updatedAt: new Date().toISOString(),
       };
 
@@ -655,6 +746,12 @@ export default function Builder() {
           setShowPricingModal(true);
           return;
         }
+
+        // ✅ REDEPLOY LOGIC: If already published and has changes, force redeploy payment
+        if (formData.published && hasUnpublishedChanges && !forceSaveAfterPayment) {
+          setShowRedeployModal(true);
+          return;
+        }
       }
 
       // ── BATCH UPLOAD PENDING IMAGES ──
@@ -676,6 +773,8 @@ export default function Builder() {
         template: currentTemplate,
         published: true,
         isPaid: true,
+        hasUnpublishedChanges: false,
+        lastPublishedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
@@ -708,6 +807,29 @@ export default function Builder() {
 
       setPublishedInviteId(id);
       setSaveSuccess(true);
+      setHasUnpublishedChanges(false);
+      setFormData(prev => ({ ...prev, ...inviteData }));
+      // Update the reference data to prevent immediate re-triggering of change detection
+      loadedDataRef.current = JSON.stringify({
+        brideName: inviteData.brideName,
+        groomName: inviteData.groomName,
+        weddingDate: inviteData.weddingDate,
+        location: inviteData.location,
+        venueAddress: inviteData.venueAddress,
+        venueCity: inviteData.venueCity,
+        googleMapsLink: inviteData.googleMapsLink,
+        coordinates: inviteData.coordinates,
+        story: inviteData.story,
+        events: inviteData.events,
+        galleryImages: inviteData.galleryImages,
+        template: inviteData.template,
+        muhurtham: inviteData.muhurtham,
+        deity: inviteData.deity,
+        family: inviteData.family,
+        eventName: inviteData.eventName,
+        enable3D: inviteData.enable3D,
+        enableEnvelope: inviteData.enableEnvelope
+      });
       
       if (forceSaveAfterPayment) {
         setShowFinalSuccessModal(true);
@@ -834,6 +956,88 @@ export default function Builder() {
     } catch (error: any) {
       console.error("Payment initialization error:", error);
       toast.error(error.message || "Payment initiation failed");
+      setIsProcessingPayment(false);
+    }
+  };
+
+  const handleRedeploy = async () => {
+    if (!currentUser || isProcessingPayment) return;
+    setIsProcessingPayment(true);
+
+    try {
+      const configRes = await fetch("/api/config");
+      const configData = await configRes.json();
+      const razorpayKeyId = configData.razorpayKeyId;
+
+      if (!razorpayKeyId) throw new Error("Razorpay key not found");
+
+      const token = await currentUser.getIdToken();
+      
+      const orderRes = await fetch("/api/create-redeploy-order", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const orderData = await orderRes.json();
+
+      if (!orderData.success) throw new Error(orderData.error || "Order failed");
+
+      const options = {
+        key: razorpayKeyId,
+        amount: orderData.amount,
+        currency: "INR",
+        name: "Union Digital",
+        description: "Redeploy Your Invitation",
+        order_id: orderData.order.id,
+        handler: async function(response: any) {
+          try {
+            const verifyRes = await fetch("/api/verify-redeploy-payment", {
+              method: "POST",
+              headers: { 
+                "Authorization": `Bearer ${token}`, 
+                "Content-Type": "application/json" 
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                inviteId: formData.id || inviteId,
+              })
+            });
+            const verifyData = await verifyRes.json();
+            
+            if (verifyData.success) {
+              toast.success("Payment verified! Redeploying...");
+              setShowRedeployModal(false);
+              setHasUnpublishedChanges(false);
+              // Save the actual changes now
+              setTimeout(async () => {
+                await handleSave(true);
+              }, 1500);
+            } else {
+              toast.error("Verification failed.");
+            }
+          } catch (err) {
+            console.error(err);
+            toast.error("An error occurred during verification.");
+          } finally {
+            setIsProcessingPayment(false);
+          }
+        },
+        prefill: {
+          email: currentUser?.email || "",
+          name: currentUser?.displayName || "",
+        },
+        theme: { color: "#000000" }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || "Redeploy failed");
       setIsProcessingPayment(false);
     }
   };
@@ -1245,20 +1449,44 @@ export default function Builder() {
 
             {/* Sidebar Publish Button */}
             <div className="p-6 border-t border-editorial-border bg-white mt-auto">
-              <button
-                onClick={() => handleSave()}
-                disabled={isSaving || isCheckingPayment}
-                className="w-full editorial-button bg-editorial-ink text-white py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all disabled:opacity-60"
-              >
-                {isSaving || isCheckingPayment ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Rocket className="w-4 h-4" />
-                )}
-                <span className="text-[11px] font-bold uppercase tracking-[0.2em]">
-                  {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Invitation"}
-                </span>
-              </button>
+              {!formData.published ? (
+                <button
+                  onClick={() => handleSave()}
+                  disabled={isSaving || isCheckingPayment}
+                  className="w-full editorial-button bg-editorial-ink text-white py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all disabled:opacity-60 shadow-xl"
+                >
+                  {isSaving || isCheckingPayment ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Rocket className="w-4 h-4" />
+                  )}
+                  <span className="text-[11px] font-bold uppercase tracking-[0.2em]">
+                    {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Invitation"}
+                  </span>
+                </button>
+              ) : hasUnpublishedChanges ? (
+                <motion.button
+                  initial={{ scale: 1 }}
+                  animate={{ scale: [1, 1.01, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                  onClick={() => setShowRedeployModal(true)}
+                  disabled={isSaving || isCheckingPayment}
+                  className="w-full editorial-button bg-editorial-accent text-white py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-[#B37E4A] transition-all disabled:opacity-60 shadow-xl relative overflow-hidden"
+                >
+                  <div className="absolute inset-0 bg-white/5 animate-pulse" />
+                  {isSaving || isCheckingPayment ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <RefreshCcw className="w-4 h-4" />
+                  )}
+                  <span className="text-[11px] font-bold uppercase tracking-[0.2em]">Redeploy Changes</span>
+                </motion.button>
+              ) : (
+                <div className="w-full py-4 rounded-xl flex items-center justify-center gap-2 bg-green-50 text-green-700 border border-green-100 shadow-sm">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span className="text-[11px] font-bold uppercase tracking-[0.2em]">Website is Live</span>
+                </div>
+              )}
             </div>
           </motion.aside>
         )}
@@ -1337,20 +1565,54 @@ export default function Builder() {
                 <span>{isSavingDraft ? "Saving..." : "Save Draft"}</span>
               </button>
 
-              <button
-                onClick={() => handleSave()}
-                disabled={isSaving || isCheckingPayment}
-                className="editorial-button bg-editorial-accent hover:bg-[#B37E4A] text-white px-5 py-2 flex items-center justify-center gap-2 disabled:opacity-60"
-              >
-                {isSaving || isCheckingPayment ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <div className="relative group">
+                {!formData.published ? (
+                  <button
+                    onClick={() => handleSave()}
+                    disabled={isSaving || isCheckingPayment}
+                    className="editorial-button bg-editorial-ink hover:bg-black text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(0,0,0,0.1)] hover:shadow-[0_0_25px_rgba(179,126,74,0.3)] transition-all group"
+                  >
+                    {isSaving || isCheckingPayment ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Rocket className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                    )}
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em]">
+                      {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish"}
+                    </span>
+                  </button>
+                ) : hasUnpublishedChanges ? (
+                  <div className="relative">
+                    <motion.button
+                      initial={{ scale: 1 }}
+                      animate={{ scale: [1, 1.02, 1] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                      onClick={() => setShowRedeployModal(true)}
+                      disabled={isSaving || isCheckingPayment}
+                      className="editorial-button bg-editorial-ink text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(179,126,74,0.3)] hover:shadow-[0_0_30px_rgba(179,126,74,0.5)] transition-all relative overflow-hidden group border border-editorial-accent/30"
+                    >
+                      <div className="absolute inset-0 bg-editorial-accent/20 animate-pulse" />
+                      {isSaving || isCheckingPayment ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-700" />
+                      )}
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] relative z-10">Redeploy</span>
+                    </motion.button>
+                    <div className="absolute -top-3 -right-2 px-2 py-0.5 bg-editorial-accent text-white text-[8px] font-bold uppercase tracking-tighter rounded-full border-2 border-white shadow-xl pointer-events-none whitespace-nowrap z-20">
+                      Changes Pending
+                    </div>
+                  </div>
                 ) : (
-                  <Send className="w-3.5 h-3.5" />
+                  <button
+                    disabled
+                    className="flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] bg-green-50 text-green-700 border border-green-100 shadow-sm transition-all grayscale-[0.2]"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>✓ Live</span>
+                  </button>
                 )}
-                <span className="text-[10px] font-bold uppercase tracking-widest">
-                  {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "Publish"}
-                </span>
-              </button>
+              </div>
             </div>
           </div>
         </header>
@@ -1523,9 +1785,91 @@ export default function Builder() {
                   )}
                   {isProcessingPayment ? "Processing..." : `Pay ₹${templatePrices[formData.template || "minimal"] || 999} & Publish`}
                 </button>
-                <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-tight">
-                  AFTER {calculateFreeViews(templatePrices[formData.template || "minimal"] || 999)} VIEWS, TOP UP ₹999 TO GET 5000 MORE VIEWS
+                <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-widest bg-editorial-bg py-2 rounded-lg border border-editorial-border/40">
+                  AFTER {calculateFreeViews(templatePrices[formData.template || "minimal"] || 999)} VIEWS, TOP UP <span className="text-editorial-ink font-bold">₹99</span> TO GET <span className="text-editorial-ink font-bold">1000 MORE VIEWS</span>
                 </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Redeploy Modal ── */}
+      <AnimatePresence>
+        {showRedeployModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !isProcessingPayment && setShowRedeployModal(false)}
+              className="absolute inset-0 bg-editorial-ink/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-white w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden p-8"
+            >
+              <button 
+                onClick={() => setShowRedeployModal(false)}
+                disabled={isProcessingPayment}
+                className="absolute top-6 right-6 p-2 hover:bg-neutral-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-editorial-muted" />
+              </button>
+
+              <div className="text-center mb-10">
+                <div className="w-16 h-16 bg-editorial-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                  <Rocket className="w-8 h-8 text-editorial-accent" />
+                </div>
+                <h2 className="text-3xl font-serif italic mb-2">Publish Your Updates</h2>
+                <p className="text-xs uppercase tracking-widest text-editorial-muted">
+                  Your invitation has unpublished changes.
+                </p>
+                <div className="flex items-center justify-center gap-2 mt-4">
+                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹99</span>
+                  <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted text-left">
+                    Redeploy Fee<br />ONE-TIME
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4 mb-10">
+                {[
+                  "Update live website",
+                  "Sync new images & gallery",
+                  "Sync text & location changes",
+                  "Fast CDN cache refresh",
+                  "Keep same invitation link",
+                ].map((item, i) => (
+                  <div key={i} className="flex items-center gap-4 text-xs font-medium text-editorial-secondary">
+                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-4">
+                <button
+                  onClick={handleRedeploy}
+                  disabled={isProcessingPayment}
+                  className="w-full bg-editorial-ink text-white py-5 rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] shadow-2xl hover:bg-black transition-all flex items-center justify-center gap-3 group"
+                >
+                  {isProcessingPayment ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Check className="w-5 h-5 group-hover:scale-110 transition-transform text-editorial-accent" />
+                  )}
+                  <span className="relative z-10">
+                    {isProcessingPayment ? "Processing..." : `PAY ₹99 & REDEPLOY`}
+                  </span>
+                </button>
+                <div className="mt-4 text-center">
+                  <p className="text-[10px] text-editorial-muted font-medium uppercase tracking-[0.1em]">
+                    Your changes will go live immediately after payment
+                  </p>
+                </div>
               </div>
             </motion.div>
           </div>
