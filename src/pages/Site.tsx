@@ -40,11 +40,20 @@ export default function Site() {
     </div>
   );
 
-  if (invite.views >= 500) return (
-    <div className="min-h-screen flex items-center justify-center text-center p-8">
-      <div>
-        <h2 className="text-2xl font-serif mb-2">This invitation has expired</h2>
-        <p className="text-gray-500">Contact the host for more information.</p>
+  if (invite.limitExceeded) return (
+    <div className="min-h-screen flex flex-col items-center justify-center text-center p-8 bg-editorial-bg">
+      <div className="max-w-md bg-white p-12 rounded-2xl shadow-xl editorial-card">
+        <h2 className="text-3xl font-serif italic mb-4">View Limit Reached</h2>
+        <p className="text-editorial-muted mb-8 text-sm leading-relaxed">
+          This premium invitation has reached its allocated view limit. 
+          If you are the host, please visit your dashboard to top up views and keep your celebration accessible.
+        </p>
+        <div className="space-y-4">
+          <p className="text-[10px] uppercase tracking-widest font-bold text-editorial-accent">
+            Current Capacity Exhausted
+          </p>
+          <div className="h-px w-12 bg-editorial-border mx-auto" />
+        </div>
       </div>
     </div>
   );

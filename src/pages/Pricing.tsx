@@ -10,10 +10,13 @@ import { useState, useEffect } from "react";
 import { auth, authFetch } from "../lib/firebase";
 import toast from "react-hot-toast";
 
+import { calculateFreeViews } from "../lib/pricing";
+
 export default function Pricing() {
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(false);
   const [minimalPrice, setMinimalPrice] = useState(499);
+  const [viewLimit, setViewLimit] = useState(500);
 
   useEffect(() => {
     async function loadPrice() {
@@ -23,7 +26,11 @@ export default function Pricing() {
         const snap = await getDoc(doc(db, "templates", "minimal"));
         if (snap.exists()) {
           const data = snap.data();
-          if (data.publishPrice) setMinimalPrice(Number(data.publishPrice));
+          if (data.publishPrice) {
+             const price = Number(data.publishPrice);
+             setMinimalPrice(price);
+             setViewLimit(calculateFreeViews(price));
+          }
         }
       } catch (e) {
         console.error("Failed to load minimal price:", e);
@@ -161,13 +168,13 @@ export default function Pricing() {
 
           <div className="space-y-6 mb-12">
             {[
+              `Up to ${viewLimit} Guest Views Included`,
               "Unlimited Edits & Updates",
               "Permanent Shareable Link",
               "Access to All Premium Templates",
               "High-Resolution Gallery Hosting",
               "Interactive RSVP & Guest List",
               "Custom Map & Location Integration",
-              "No Watermarks or Ads"
             ].map((feature) => (
               <div key={feature} className="flex items-start gap-4">
                 <div className="mt-1 shrink-0 w-5 h-5 rounded-full bg-editorial-accent/10 flex items-center justify-center">

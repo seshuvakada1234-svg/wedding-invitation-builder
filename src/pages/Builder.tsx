@@ -48,6 +48,8 @@ import toast from "react-hot-toast";
 import ImageEditorModal from "../components/ImageEditorModal";
 import ImageItem from "../components/ImageItem";
 
+import { calculateFreeViews } from "../lib/pricing";
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TEMPLATE_DEFAULTS: Record<string, string[]> = {
@@ -1495,7 +1497,7 @@ export default function Builder() {
 
               <div className="space-y-4 mb-10">
                 {[
-                  "Up to 500 views included",
+                  `Up to ${calculateFreeViews(templatePrices[formData.template || "minimal"] || 999)} views included`,
                   "Beautiful live website",
                   "Shareable link",
                   "WhatsApp sharing",
@@ -1522,7 +1524,7 @@ export default function Builder() {
                   {isProcessingPayment ? "Processing..." : `Pay ₹${templatePrices[formData.template || "minimal"] || 999} & Publish`}
                 </button>
                 <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-tight">
-                  After 500 views, top up for ₹499 to get 500 more views
+                  AFTER {calculateFreeViews(templatePrices[formData.template || "minimal"] || 999)} VIEWS, TOP UP ₹999 TO GET 5000 MORE VIEWS
                 </p>
               </div>
             </motion.div>

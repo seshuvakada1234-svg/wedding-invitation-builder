@@ -105,6 +105,15 @@ function serializeFirestoreData(data: Record<string, any>) {
   );
 }
 
+function calculateFreeViews(price: number) {
+  if (price >= 9999) return 10000;
+  if (price >= 4999) return 5000;
+  if (price >= 1999) return 2000;
+  if (price >= 1499) return 1500;
+  if (price >= 999) return 1000;
+  return 500;
+}
+
 // ─── Server ──────────────────────────────────────────────────────────────────
 
 async function startServer() {
@@ -238,6 +247,19 @@ async function startServer() {
 
         const data = serializeFirestoreData(inviteDoc.data() || {});
         
+        // ✅ Enforce view limits
+        const currentViews = data.views || 0;
+        const freeViews = data.freeViews || 500; // default 500
+        
+        if (currentViews >= freeViews && req.query.increment === "true") {
+           // Allow returning the data but maybe flag it as exceeded
+           // The frontend should handle showing the "Limit Exceeded" screen
+           return res.json({ 
+             success: true, 
+             invite: { id: inviteDoc.id, ...data, limitExceeded: true } 
+           });
+        }
+
         // Increment views if not in edit mode (optional check)
         if (req.query.increment === "true") {
           await inviteDoc.ref.update({
@@ -324,7 +346,7 @@ async function startServer() {
         });
       }
 
-      const inviteData = {
+      const inviteData: any = {
         ...data,
         template,
         userId: tokenUserId,
@@ -332,6 +354,24 @@ async function startServer() {
         slug: id, // Ensure slug is same as id if not provided
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
+
+      // ✅ Dynamically ensure freeViews if not already set or if template changed
+      try {
+        const templateDoc = await db.collection("templates").doc(template).get();
+        if (templateDoc.exists) {
+          const tData = templateDoc.data();
+          const price = Number(tData?.publishPrice || 499);
+          inviteData.templatePrice = price;
+          // Only update if it doesn't exist or if we want to ensure it's synced with the current template price
+          // For now, let's always sync it to keep it simple and fair
+          inviteData.freeViews = calculateFreeViews(price);
+        } else {
+           // Fallback to default if template doc missing
+           inviteData.freeViews = 500;
+        }
+      } catch (e) {
+        console.warn("Error auto-setting freeViews during save:", e);
+      }
 
       await db.collection("invites").doc(id).set(inviteData, { merge: true });
       res.json({ success: true });
@@ -592,6 +632,27 @@ async function startServer() {
         }
 
         await userRef.update(updateData);
+
+        // ✅ Update any active invites with this template to have the new freeViews limit
+        try {
+          const freeViews = calculateFreeViews(paymentAmount);
+          const invitesSnapshot = await db.collection("invites")
+            .where("userId", "==", confirmedUserId)
+            .where("template", "==", templateId)
+            .get();
+          
+          const batch = db.batch();
+          invitesSnapshot.docs.forEach(doc => {
+            batch.update(doc.ref, { 
+              templatePrice: paymentAmount,
+              freeViews: freeViews,
+              // currentViews is already incremented by the visitor logic
+            });
+          });
+          await batch.commit();
+        } catch (eInvites) {
+           console.error("Error updating invite freeViews:", eInvites);
+        }
 
         // ✅ Create detailed payment record for analytics
         await db.collection("payments").add({

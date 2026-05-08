@@ -95,7 +95,9 @@ export default function Dashboard() {
             </button>
           </div>
         ) : sites.map((site, i) => {
-          const viewPercent = (site.views / site.viewLimit) * 100;
+          const views = Number(site.views || 0);
+          const limit = Number(site.freeViews || site.viewLimit || 500);
+          const viewPercent = Math.min((views / limit) * 100, 100);
           const isWarning = viewPercent > 80;
 
           return (
@@ -151,7 +153,7 @@ export default function Dashboard() {
                    <div className="flex justify-between items-center mb-1.5 text-[10px] font-bold uppercase tracking-wider">
                       <span className="text-editorial-muted">Guest Views</span>
                       <span className={isWarning ? 'text-red-500' : 'text-editorial-ink'}>
-                        {site.views} / {site.viewLimit}
+                        {views} / {limit}
                       </span>
                    </div>
                    <div className="h-1.5 bg-editorial-border rounded-full overflow-hidden">

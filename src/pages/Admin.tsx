@@ -565,8 +565,9 @@ function InviteTable({
               <td className="px-6 py-4 text-xs text-editorial-secondary capitalize">
                 {site.template}
               </td>
-              <td className="px-6 py-4 text-center text-xs font-mono font-bold">
-                {(site.views || 0).toLocaleString()}
+              <td className="px-6 py-4 text-center">
+                <p className="text-xs font-mono font-bold">{(site.views || 0).toLocaleString()}</p>
+                <p className="text-[9px] text-editorial-muted">limit: {site.freeViews || 500}</p>
               </td>
               <td className="px-6 py-4">
                 {site.isPaid ? (

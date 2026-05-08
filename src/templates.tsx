@@ -11,6 +11,7 @@ import KeralaWeddingTemplate from "./components/templates/KeralaWeddingTemplate"
 import KeralaRevealTemplate from "./components/templates/KeralaRevealTemplate";
 import SouthIndianHousewarmingTemplate from "./components/templates/SouthIndianHousewarmingTemplate";
 import { WeddingEvent } from "./types";
+import { calculateFreeViews } from "./lib/pricing";
 
 // Helper for horizontal scroll check
 const useHorizontalScroll = () => {
