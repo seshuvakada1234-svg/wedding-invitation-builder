@@ -133,7 +133,8 @@ async function startServer() {
     console.log("POST /api/upload started");
     try {
       const form = formidable({
-        maxFileSize: 10 * 1024 * 1024,
+        maxFileSize: 50 * 1024 * 1024,
+        maxTotalFileSize: 50 * 1024 * 1024,
         allowEmptyFiles: false,
       });
 
@@ -189,7 +190,7 @@ async function startServer() {
   });
 
   // JSON body parser — skip for already handled upload
-  app.use(express.json({ limit: "10mb" }));
+  app.use(express.json({ limit: "50mb" }));
 
     // ── Get User Invites ──────────────────────────────────────────────────────
     app.get("/api/get-invites", async (req, res) => {
@@ -382,6 +383,36 @@ async function startServer() {
         success: false,
         error: error instanceof Error ? error.message : "Internal Server Error",
       });
+    }
+  });
+
+  // ── Save Draft ─────────────────────────────────────────────────────────────
+  app.post("/api/save-draft", async (req, res) => {
+    try {
+      const tokenUserId = await verifyUser(req);
+      const { id, ...data } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ success: false, error: "Invitation ID is required" });
+      }
+
+      const db = getAdminDb();
+      if (!db) {
+        return res.status(503).json({ success: false, error: "Database configuration error." });
+      }
+
+      const inviteData: any = {
+        ...data,
+        userId: tokenUserId,
+        slug: id,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      await db.collection("invites").doc(id).set(inviteData, { merge: true });
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Save draft error:", error);
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 

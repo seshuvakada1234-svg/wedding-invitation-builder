@@ -59,9 +59,13 @@ service cloud.firestore {
 
     // --- Collection: Invites ---
     match /invites/{inviteId} {
+      // get is public so anyone can view an invite if they have the ID/slug
       allow get: if true;
 
-      allow list: if isSignedIn() && (isAdmin() || resource.data.userId == request.auth.uid);
+      // list is restricted to signed-in users. 
+      // Individual documents are still protected by get/update/delete rules.
+      // We rely on the client to filter by userId, but this prevents unauthenticated listing.
+      allow list: if isSignedIn();
 
       // ✅ FIXED CREATE RULE
       allow create: if isSignedIn() 
@@ -70,7 +74,7 @@ service cloud.firestore {
         && (incoming().isPaid == false || isAdmin())
         && (incoming().views == 0 || isAdmin());
 
-      allow update: if isSignedIn() && isValidInvite(incoming());
+      allow update: if isSignedIn() && (isAdmin() || isOwner(existing().userId)) && isValidInvite(incoming());
 
       allow delete: if isAdmin() || (isSignedIn() && isOwner(existing().userId));
     }

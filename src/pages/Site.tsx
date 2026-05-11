@@ -58,7 +58,17 @@ export default function Site() {
     </div>
   );
 
-  const templateConfig = getTemplateById(invite.template);
+  // ── Separation of Concerns: Site ALWAYS uses publishedData snapshot ────────
+  // We only fall back to the root invite object for legacy invitations that 
+  // haven't been re-saved with the new isolated state architecture.
+  const d = invite.publishedData || invite.templateData || invite;
+  
+  // Explicitly check if we should be showing the published version
+  // If the invite is marked as published, we should prefer d (which is publishedData if it exists)
+  const isPublishedInv = invite.published === true;
+  
+  const currentTemplate = d.template || invite.template || 'minimal';
+  const templateConfig = getTemplateById(currentTemplate);
   const TemplateComponent = templateConfig?.component;
 
   if (!TemplateComponent) return (
@@ -69,28 +79,28 @@ export default function Site() {
 
   return (
     <TemplateComponent
-      brideName={invite.brideName || ""}
-      groomName={invite.groomName || ""}
-      date={invite.weddingDate || ""}
-      venue={invite.location || ""}
-      venueAddress={invite.venueAddress}
-      venueCity={invite.venueCity}
-      googleMapsLink={invite.googleMapsLink}
-      googleMapsEmbedUrl={invite.googleMapsLink}
-      coordinates={invite.coordinates}
-      story={invite.story}
-      enable3D={invite.enable3D}
-      enableEnvelope={invite.enableEnvelope}
-      coverImage={invite.coverImage}
-      events={invite.events || []}
-      galleryImages={invite.galleryImages || []}
-      deity={invite.deity}
-      eventName={invite.eventName}
-      muhurtham={invite.muhurtham}
-      family={invite.family}
-      hosts={{ primary: invite.brideName || "", secondary: invite.groomName || "" }}
-      address={invite.venueAddress || invite.location}
-      image={invite.coverImage}
+      brideName={d.brideName || ""}
+      groomName={d.groomName || ""}
+      date={d.weddingDate || ""}
+      venue={d.location || ""}
+      venueAddress={d.venueAddress}
+      venueCity={d.venueCity}
+      googleMapsLink={d.googleMapsLink}
+      googleMapsEmbedUrl={d.googleMapsLink}
+      coordinates={d.coordinates}
+      story={d.story}
+      enable3D={d.enable3D}
+      enableEnvelope={d.enableEnvelope}
+      coverImage={d.coverImage}
+      events={d.events || []}
+      galleryImages={d.galleryImages || []}
+      deity={d.deity}
+      eventName={d.eventName}
+      muhurtham={d.muhurtham}
+      family={d.family}
+      hosts={{ primary: d.brideName || "", secondary: d.groomName || "" }}
+      address={d.venueAddress || d.location}
+      image={d.coverImage}
     />
   );
 }

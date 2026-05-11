@@ -23,16 +23,50 @@ export interface EditableImage {
   file?: File;
 }
 
+export interface TemplateDraft {
+  template: TemplateType;
+  brideName: string;
+  groomName: string;
+  weddingDate: string;
+  location: string;
+  coverImage?: string | EditableImage;
+  coverImageKey?: string;
+  galleryImages: (string | EditableImage)[];
+  galleryImageKeys?: string[];
+  events: WeddingEvent[];
+  story?: string;
+  muhurtham?: string;
+  deity?: string;
+  family?: string;
+  eventName?: string;
+  enable3D?: boolean;
+  enableEnvelope?: boolean;
+  googleMapsLink?: string;
+  googleMapsEmbedUrl?: string;
+  venueAddress?: string;
+  venueCity?: string;
+  coordinates?: string;
+}
+
 export interface WeddingInvite {
   id?: string;
   slug: string;
   userId: string;
   userName?: string;
   email?: string;
+  
+  // Separation of states
+  draftData: TemplateDraft;
+  publishedData?: TemplateDraft;
+  
+  // Root fields for compatibility and quick access
   brideName: string;
   groomName: string;
   weddingDate: string;
   location: string;
+  template: TemplateType;
+
+  // Additional fields used in Builder state
   coverImage?: string | EditableImage;
   coverImageKey?: string;
   galleryImages: (string | EditableImage)[];
@@ -50,7 +84,8 @@ export interface WeddingInvite {
   eventName?: string;
   story?: string;
   events: WeddingEvent[];
-  template: TemplateType;
+
+  templateDrafts?: Record<string, TemplateDraft>;
   isPaid: boolean;
   published: boolean;
   views: number;

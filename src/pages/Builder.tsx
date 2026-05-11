@@ -40,7 +40,7 @@ import {
   ZoomIn as ZoomIcon,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { WeddingInvite, TemplateType, WeddingEvent, EditableImage } from "../types";
+import { WeddingInvite, TemplateType, WeddingEvent, EditableImage, TemplateDraft } from "../types";
 import { auth, authFetch, db, handleFirestoreError, loginAnonymously } from "../lib/firebase";
 import { getTemplateById } from "../templates";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
@@ -101,6 +101,7 @@ export default function Builder() {
     enable3D: true,
     enableEnvelope: true,
     template: initialTemplate,
+    templateDrafts: {},
     galleryImages: GALLERY_DEFAULTS[initialTemplate] || GALLERY_DEFAULTS["default"],
     events: (TEMPLATE_DEFAULTS[initialTemplate] || ["Wedding"]).map((name) => ({
       name,
@@ -193,6 +194,8 @@ export default function Builder() {
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [viewDevice, setViewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
   
+  const prevTemplateRef = useRef<string | undefined>(formData.template);
+
   // ── Track changes ──────────────────────────────────────────────────────────
   const loadedDataRef = useRef<string>("");
   useEffect(() => {
@@ -241,6 +244,93 @@ export default function Builder() {
     target: "cover",
   });
 
+  // ─── Derived values ─────────────────────────────────────────────────────────
+  const isHousewarming = formData.template === "housewarming-south";
+
+  const siteSlug = 
+    formData.slug || 
+    inviteId || 
+    (`${formData.groomName?.toLowerCase() || "groom"}-${formData.brideName?.toLowerCase() || "bride"}`)
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9-]/g, "") || "new-invite";
+
+  const getCurrentDataAsDraft = (source: any = formData): TemplateDraft => ({
+    template: source.template || initialTemplate,
+    brideName: source.brideName || "",
+    groomName: source.groomName || "",
+    weddingDate: source.weddingDate || "",
+    location: source.location || "",
+    coverImage: source.coverImage,
+    coverImageKey: source.coverImageKey,
+    galleryImages: source.galleryImages || [],
+    galleryImageKeys: source.galleryImageKeys || [],
+    events: source.events || [],
+    story: source.story,
+    muhurtham: source.muhurtham,
+    deity: source.deity,
+    family: source.family,
+    eventName: source.eventName,
+    enable3D: source.enable3D,
+    enableEnvelope: source.enableEnvelope,
+    googleMapsLink: source.googleMapsLink,
+    googleMapsEmbedUrl: source.googleMapsEmbedUrl,
+    venueAddress: source.venueAddress,
+    venueCity: source.venueCity,
+    coordinates: source.coordinates,
+  });
+
+  // ── Auto-save Draft ────────────────────────────────────────────────────────
+  const lastAutoSaveRef = useRef<string>("");
+  useEffect(() => {
+    if (!currentUser || authLoading || isFetchingInvite || !isEditMode) return;
+
+    const currentDataStr = JSON.stringify({
+      formData: formData,
+      activeDraft: getCurrentDataAsDraft()
+    });
+
+    if (lastAutoSaveRef.current === "") {
+      lastAutoSaveRef.current = currentDataStr;
+      return;
+    }
+
+    if (lastAutoSaveRef.current === currentDataStr) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const token = await currentUser.getIdToken();
+        const id = inviteId || formData.slug || siteSlug;
+        
+        const currentDraft = getCurrentDataAsDraft();
+        const inviteData: Partial<WeddingInvite> = {
+          draftData: currentDraft,
+          templateDrafts: {
+            ...(formData.templateDrafts || {}),
+            [formData.template || "minimal"]: currentDraft
+          },
+          updatedAt: new Date().toISOString() as any,
+          hasUnpublishedChanges: true,
+        };
+
+        await fetch("/api/save-draft", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ id, ...inviteData }),
+        });
+        
+        lastAutoSaveRef.current = currentDataStr;
+        console.log("Auto-save successful");
+      } catch (err) {
+        console.error("Auto-save failed:", err);
+      }
+    }, 5000); // 5 second debounce
+
+    return () => clearTimeout(timer);
+  }, [formData, currentUser, authLoading, isFetchingInvite, isEditMode, inviteId, siteSlug]);
+
   // ── Load existing invite ────────────────────────────────────────────────────
   useEffect(() => {
     async function loadInvite() {
@@ -265,30 +355,43 @@ export default function Builder() {
             navigate("/dashboard");
             return;
           }
-          setFormData(data);
+
+          // Hydrate from draftData if available
+          if (data.draftData) {
+            setFormData({
+              ...data,
+              ...data.draftData
+            });
+          } else {
+            setFormData(data);
+          }
+
+          // Sync prevTemplateRef to avoid triggering the template switch effect on initial load
+          prevTemplateRef.current = data.draftData?.template || data.template;
           setIsEditMode(true);
           setHasUnpublishedChanges(data.hasUnpublishedChanges || false);
           
           // Set initial reference data AFTER loading
+          const d = data.draftData || data;
           loadedDataRef.current = JSON.stringify({
-            brideName: data.brideName,
-            groomName: data.groomName,
-            weddingDate: data.weddingDate,
-            location: data.location,
-            venueAddress: data.venueAddress,
-            venueCity: data.venueCity,
-            googleMapsLink: data.googleMapsLink,
-            coordinates: data.coordinates,
-            story: data.story,
-            events: data.events,
-            galleryImages: data.galleryImages,
-            template: data.template,
-            muhurtham: data.muhurtham,
-            deity: data.deity,
-            family: data.family,
-            eventName: data.eventName,
-            enable3D: data.enable3D,
-            enableEnvelope: data.enableEnvelope
+            brideName: d.brideName,
+            groomName: d.groomName,
+            weddingDate: d.weddingDate,
+            location: d.location,
+            venueAddress: d.venueAddress,
+            venueCity: d.venueCity,
+            googleMapsLink: d.googleMapsLink,
+            coordinates: d.coordinates,
+            story: d.story,
+            events: d.events,
+            galleryImages: d.galleryImages,
+            template: d.template,
+            muhurtham: d.muhurtham,
+            deity: d.deity,
+            family: d.family,
+            eventName: d.eventName,
+            enable3D: d.enable3D,
+            enableEnvelope: d.enableEnvelope
           });
         } else {
           toast.error("Invitation not found.");
@@ -308,22 +411,86 @@ export default function Builder() {
   }, [inviteId, authLoading, currentUser, navigate]);
 
   // ── Sync template defaults ──────────────────────────────────────────────────
-  const prevTemplateRef = useRef<string | undefined>(formData.template);
   useEffect(() => {
-    // Only sync defaults if the template was actually changed by the user in the editor,
-    // and not during the initial invitation data load.
-    if (!isFetchingInvite && prevTemplateRef.current !== formData.template && formData.template) {
-      const defaultEventNames = TEMPLATE_DEFAULTS[formData.template] || ["Wedding"];
-      setFormData((prev) => ({
-        ...prev,
-        galleryImages: GALLERY_DEFAULTS[formData.template || "default"] || GALLERY_DEFAULTS["default"],
-        events: defaultEventNames.map((name) => ({
-          name,
-          date: prev.weddingDate || "TBD",
-          time: "TBD",
-          location: prev.location || "TBD",
-        })),
-      }));
+    if (isFetchingInvite) return;
+
+    const oldTemplate = prevTemplateRef.current;
+    const newTemplate = formData.template;
+
+    // Only proceed if template actually changed
+    if (oldTemplate && newTemplate && oldTemplate !== newTemplate) {
+      setFormData((prev) => {
+        if (!prev) return prev;
+
+        // 1. Capture current data into a draft for the old template
+        // [IMPORTANT] We MUST ensure the draft we are saving is associated with the TEMPLATE ID that was JUST active
+        const currentDataAsDraft = {
+          ...getCurrentDataAsDraft(prev),
+          template: oldTemplate as TemplateType
+        };
+
+        const updatedDrafts = {
+          ...(prev.templateDrafts || {}),
+          [oldTemplate]: currentDataAsDraft,
+        };
+
+        // 2. Check if we have a draft for the new template
+        const existingDraft = updatedDrafts[newTemplate];
+
+        if (existingDraft) {
+          // Restore from draft - EXPLICITLY set all fields from the draft
+          // to overwrite any "contaminated" root fields from the old template
+          return {
+            ...prev,
+            ...existingDraft,
+            templateDrafts: updatedDrafts,
+            // Ensure the main template field is also correct
+            template: newTemplate as TemplateType
+          };
+        } else {
+          // No draft exists? Use defaults for new template, but keep names/date/location
+          const defaultEventNames = TEMPLATE_DEFAULTS[newTemplate] || ["Wedding"];
+          
+          // Create a "clean" new template state
+          const newTemplateState: TemplateDraft = {
+            template: newTemplate as TemplateType,
+            brideName: prev.brideName || "",
+            groomName: prev.groomName || "",
+            weddingDate: prev.weddingDate || "",
+            location: prev.location || "",
+            galleryImages: GALLERY_DEFAULTS[newTemplate] || GALLERY_DEFAULTS["default"],
+            events: defaultEventNames.map((name) => ({
+              name,
+              date: prev.weddingDate || "TBD",
+              time: "TBD",
+              location: prev.location || "TBD",
+            })),
+            // Reset other design fields to defaults for the new template
+            coverImage: undefined,
+            coverImageKey: undefined,
+            galleryImageKeys: [],
+            story: "",
+            muhurtham: "",
+            deity: "",
+            family: "",
+            eventName: "",
+            enable3D: true,
+            enableEnvelope: true,
+            googleMapsLink: "",
+            googleMapsEmbedUrl: "",
+            venueAddress: "",
+            venueCity: "",
+            coordinates: "",
+          };
+
+          return {
+            ...prev,
+            ...newTemplateState,
+            templateDrafts: updatedDrafts,
+            template: newTemplate as TemplateType
+          };
+        }
+      });
     }
     prevTemplateRef.current = formData.template;
   }, [formData.template, isFetchingInvite]);
@@ -341,18 +508,6 @@ export default function Builder() {
       </div>
     );
   }
-
-  // ─── Derived values ─────────────────────────────────────────────────────────
-  const isHousewarming = formData.template === "housewarming-south";
-
-  const siteSlug = 
-    formData.slug || 
-    inviteId || 
-    (`${formData.groomName?.toLowerCase() || "groom"}-${formData.brideName?.toLowerCase() || "bride"}`)
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9-]/g, "") || "new-invite";
-
-  // ─── Event handlers ─────────────────────────────────────────────────────────
 
   const handleEventChange = (index: number, field: keyof WeddingEvent, value: string) => {
     const newEvents = [...(formData.events || [])];
@@ -633,6 +788,12 @@ export default function Builder() {
 
       let finalizedData = { ...formData };
       
+      // Update template drafts before saving
+      finalizedData.templateDrafts = {
+        ...(formData.templateDrafts || {}),
+        [formData.template || "minimal"]: getCurrentDataAsDraft()
+      };
+      
       // For drafts, we generally don't perform production R2 uploads 
       // unless it's already published and we are just sync'ing.
       // But per requirements, R2 upload ONLY happens after payment.
@@ -646,14 +807,21 @@ export default function Builder() {
         ? inviteId || finalizedData.slug || siteSlug
         : finalizedData.slug || finalizedData.id || Math.random().toString(36).substring(2, 10);
 
+      const currentDraft = getCurrentDataAsDraft();
       const inviteData: Partial<WeddingInvite> = {
         ...finalizedData,
+        draftData: currentDraft,
         id,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
         email: currentUser.email || "",
         slug: id,
-        published: false,
+        brideName: currentDraft.brideName,
+        groomName: currentDraft.groomName,
+        template: currentDraft.template,
+        weddingDate: currentDraft.weddingDate,
+        location: currentDraft.location,
+        published: formData.published || false,
         hasUnpublishedChanges: hasUnpublishedChanges,
         updatedAt: new Date().toISOString(),
       };
@@ -756,21 +924,36 @@ export default function Builder() {
 
       // ── BATCH UPLOAD PENDING IMAGES ──
       // This ensures images are ONLY uploaded when the user is about to publish a paid invite
-      const finalizedData = await uploadPendingImages(formData);
+      const dataWithDrafts = {
+        ...formData,
+        templateDrafts: {
+          ...(formData.templateDrafts || {}),
+          [formData.template || "minimal"]: getCurrentDataAsDraft()
+        }
+      };
+      
+      const finalizedData = await uploadPendingImages(dataWithDrafts);
 
       const currentTemplate = finalizedData.template || "minimal";
       const id = isEditMode
         ? inviteId || finalizedData.slug || siteSlug
         : finalizedData.slug || finalizedData.id || Math.random().toString(36).substring(2, 10);
 
+      const draftState = getCurrentDataAsDraft(finalizedData);
       const inviteData: Partial<WeddingInvite> = {
         ...finalizedData,
+        draftData: draftState,
+        publishedData: JSON.parse(JSON.stringify(draftState)),
         id,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
         email: currentUser.email || "",
         slug: id,
         template: currentTemplate,
+        brideName: draftState.brideName,
+        groomName: draftState.groomName,
+        weddingDate: draftState.weddingDate,
+        location: draftState.location,
         published: true,
         isPaid: true,
         hasUnpublishedChanges: false,
@@ -1329,18 +1512,41 @@ export default function Builder() {
 
               {/* Visual Effects */}
               <div>
-                <h2 className="editorial-section-title text-[11px] mb-4">Visual Effects</h2>
-                <label className="flex items-center justify-between p-3 bg-editorial-bg border border-editorial-border rounded-xl cursor-pointer">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-editorial-ink">
-                    Enable 3D Effects
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={!!formData.enable3D}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, enable3D: e.target.checked }))}
-                    className="w-4 h-4 rounded text-editorial-accent focus:ring-editorial-accent cursor-pointer"
-                  />
-                </label>
+                <h2 className="editorial-section-title text-[11px] mb-4">Style & Template</h2>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="editorial-label text-[10px]">Active Template</label>
+                    <select
+                      value={formData.template}
+                      onChange={(e) => setFormData(prev => ({ ...prev, template: e.target.value as TemplateType }))}
+                      className="editorial-input text-xs appearance-none bg-white font-medium"
+                    >
+                      <option value="minimal">Minimal Royal</option>
+                      <option value="royal">Grand Manor</option>
+                      <option value="royal-wedding">Indian Royal Wedding</option>
+                      <option value="beach">Coastal Bliss</option>
+                      <option value="konaseema">Konaseema Heritage</option>
+                      <option value="kerala-wedding">Kerala Wedding</option>
+                      <option value="kerala-envelope-reveal">Kerala Envelope Reveal</option>
+                      <option value="housewarming-south">South Indian Housewarming</option>
+                    </select>
+                    <p className="text-[9px] text-editorial-muted italic">
+                      Switching templates preserves your text but changes the layout and design assets.
+                    </p>
+                  </div>
+
+                  <label className="flex items-center justify-between p-3 bg-editorial-bg border border-editorial-border rounded-xl cursor-pointer">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-editorial-ink">
+                      Enable 3D Effects
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={!!formData.enable3D}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, enable3D: e.target.checked }))}
+                      className="w-4 h-4 rounded text-editorial-accent focus:ring-editorial-accent cursor-pointer"
+                    />
+                  </label>
+                </div>
                 {(templateConfig?.id === "kerala-envelope-reveal" ||
                   templateConfig?.id === "housewarming-simple" ||
                   formData.template === "housewarming-south") && (
