@@ -24,14 +24,94 @@ function getR2Client() {
   const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim().replace(/^["'](.+)["']$/, "$1");
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim().replace(/^["'](.+)["']$/, "$1");
 
+  if (!endpoint || !accessKeyId || !secretAccessKey) {
+    throw new Error("Missing R2 configuration: R2_ENDPOINT, R2_ACCESS_KEY_ID, or R2_SECRET_ACCESS_KEY");
+  }
+
   return new S3Client({
     region: "auto",
-    endpoint: endpoint!,
+    endpoint: endpoint,
     credentials: {
-      accessKeyId: accessKeyId!,
-      secretAccessKey: secretAccessKey!,
+      accessKeyId: accessKeyId,
+      secretAccessKey: secretAccessKey,
     },
   });
+}
+
+/**
+ * Normalizes image fields in the invitation data to ensure they use public CDN URLs.
+ * Detects blob URLs or broken internal storage paths and replaces them with public ones if possible.
+ */
+function normalizeInvitationImages(data: any): any {
+  if (!data) return data;
+  
+  const publicUrl = (process.env.R2_PUBLIC_URL || "").trim().replace(/^["'](.+)["']$/, "$1").replace(/\/$/, "");
+  
+  const fixUrl = (val: any): any => {
+    if (!val) return val;
+    
+    // If it's an EditableImage object
+    if (typeof val === "object" && val.url) {
+      return { ...val, url: fixUrl(val.url) };
+    }
+    
+    // If it's a string URL
+    if (typeof val === "string") {
+      // 1. Detect blob URLs - these are broken for public users
+      if (val.startsWith("blob:")) return null; 
+      
+      // 2. Detect local/development paths
+      if (val.startsWith("http://localhost") || val.startsWith("http://127.0.0.1")) return null;
+      
+      // 3. Fix internal R2 endpoint URLs to use public CDN if available
+      const r2Endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1") || "";
+      const bucket = process.env.R2_BUCKET?.trim().replace(/^["'](.+)["']$/, "$1") || "";
+      
+      if (publicUrl && (val.includes(r2Endpoint) || val.includes(".r2.cloudflarestorage.com"))) {
+        // Extract the key part (usually users/userId/inviteId/timestamp-name.ext)
+        // A common pattern is endpoint/bucket/key or endpoint/key
+        const urlParts = val.split("/");
+        // Attempt to find where 'users/' starts
+        const usersIndex = urlParts.indexOf("users");
+        if (usersIndex !== -1) {
+          const key = urlParts.slice(usersIndex).join("/");
+          return `${publicUrl}/${key}`;
+        }
+      }
+    }
+    return val;
+  };
+
+  const newData = { ...data };
+  
+  // Normalize root fields
+  if (newData.coverImage) newData.coverImage = fixUrl(newData.coverImage);
+  if (newData.image) newData.image = fixUrl(newData.image);
+  
+  // Normalize gallery
+  if (Array.isArray(newData.galleryImages)) {
+    newData.galleryImages = newData.galleryImages.map(fixUrl);
+  }
+  
+  // Normalize events
+  if (Array.isArray(newData.events)) {
+    newData.events = newData.events.map((ev: any) => ({
+      ...ev,
+      image: fixUrl(ev.image)
+    }));
+  }
+  
+  // IMPORTANT: Also normalize the publishedData snapshot
+  if (newData.publishedData) {
+    newData.publishedData = normalizeInvitationImages(newData.publishedData);
+  }
+  
+  // And draftData for consistency
+  if (newData.draftData) {
+    newData.draftData = normalizeInvitationImages(newData.draftData);
+  }
+
+  return newData;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -108,7 +188,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (req.query.increment === "true") {
         await inviteDoc.ref.update({ views: admin.firestore.FieldValue.increment(1) });
       }
-      return res.json({ success: true, invite: { id: inviteDoc.id, ...serializeFirestoreData(inviteDoc.data() || {}) } });
+      const rawData = inviteDoc.data() || {};
+      const normalizedData = normalizeInvitationImages(serializeFirestoreData(rawData));
+      return res.json({ success: true, invite: { id: inviteDoc.id, ...normalizedData } });
     }
 
     // ── POST /api/save-draft ──
@@ -157,8 +239,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       
+      const normalizedSaveData = normalizeInvitationImages(data);
+      
       await adminDb.collection("invites").doc(id).set(
-        { ...data, template, userId: tokenUserId, isPaid: true, slug: id, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+        { ...normalizedSaveData, template, userId: tokenUserId, isPaid: true, slug: id, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
         { merge: true }
       );
       return res.json({ success: true });
@@ -321,10 +405,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         Body: fs.readFileSync(file.filepath),
         ContentType: file.mimetype || "image/jpeg",
       }));
-      const publicUrl = process.env.R2_PUBLIC_URL?.trim().replace(/^["'](.+)["']$/, "$1");
-      const r2Endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1");
+      const publicUrl = (process.env.R2_PUBLIC_URL || "").trim().replace(/^["'](.+)["']$/, "$1").replace(/\/$/, "");
+      const r2Endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["'](.+)["']$/, "$1");
       
-      const url = publicUrl ? `${publicUrl.replace(/\/$/, "")}/${fileName}` : `${r2Endpoint}/${bucket}/${fileName}`;
+      let url = "";
+      if (publicUrl) {
+        url = `${publicUrl}/${fileName}`;
+      } else {
+        // Fallback to internal URL (though less useful for public users)
+        url = `${r2Endpoint}/${bucket}/${fileName}`;
+      }
+      
       return res.json({ success: true, url, key: fileName });
     }
 

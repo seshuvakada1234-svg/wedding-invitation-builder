@@ -585,6 +585,16 @@ export default function Builder() {
     if (typeof updatedData.coverImage === 'object' && updatedData.coverImage?.file) {
       addTask(updatedData.coverImage.file, updatedData.coverImage.url);
     }
+    
+    // Support coupleImage found in some older templates or user requests
+    if (typeof (updatedData as any).coupleImage === 'object' && (updatedData as any).coupleImage?.file) {
+      addTask((updatedData as any).coupleImage.file, (updatedData as any).coupleImage.url);
+    }
+    
+    // Generic image field support
+    if (typeof (updatedData as any).image === 'object' && (updatedData as any).image?.file) {
+      addTask((updatedData as any).image.file, (updatedData as any).image.url);
+    }
 
     updatedData.galleryImages?.forEach((img) => {
       if (typeof img === 'object' && img.file) {
@@ -595,6 +605,9 @@ export default function Builder() {
     updatedData.events?.forEach((ev) => {
       if (typeof ev.image === 'object' && ev.image.file) {
         addTask(ev.image.file, ev.image.url);
+      } else if (typeof (ev as any).img === 'object' && (ev as any).img.file) {
+        // Some templates use .img instead of .image
+        addTask((ev as any).img.file, (ev as any).img.url);
       }
     });
 
@@ -615,6 +628,20 @@ export default function Builder() {
           updatedData.coverImageKey = result.key;
         }
       }
+      
+      if (typeof (updatedData as any).coupleImage === 'object' && (updatedData as any).coupleImage?.file) {
+        const result = uploadMap.get((updatedData as any).coupleImage.url);
+        if (result) {
+          (updatedData as any).coupleImage = { ...(updatedData as any).coupleImage, url: result.url, file: undefined };
+        }
+      }
+
+      if (typeof (updatedData as any).image === 'object' && (updatedData as any).image?.file) {
+        const result = uploadMap.get((updatedData as any).image.url);
+        if (result) {
+          (updatedData as any).image = { ...(updatedData as any).image, url: result.url, file: undefined };
+        }
+      }
 
       if (updatedData.galleryImages) {
         updatedData.galleryImages = updatedData.galleryImages.map(img => {
@@ -628,11 +655,16 @@ export default function Builder() {
 
       if (updatedData.events) {
         updatedData.events = updatedData.events.map(ev => {
+          let newEv = { ...ev };
           if (typeof ev.image === 'object' && ev.image.file) {
             const result = uploadMap.get(ev.image.url);
-            if (result) return { ...ev, image: { ...ev.image, url: result.url, file: undefined } };
+            if (result) newEv.image = { ...ev.image, url: result.url, file: undefined };
           }
-          return ev;
+          if (typeof (ev as any).img === 'object' && (ev as any).img.file) {
+            const result = uploadMap.get((ev as any).img.url);
+            if (result) (newEv as any).img = { ...(ev as any).img, url: result.url, file: undefined };
+          }
+          return newEv;
         });
       }
       

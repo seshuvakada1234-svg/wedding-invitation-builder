@@ -35,14 +35,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim().replace(/^["'](.+)["']$/, "$1");
     const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim().replace(/^["'](.+)["']$/, "$1");
     const bucket = process.env.R2_BUCKET?.trim().replace(/^["'](.+)["']$/, "$1");
-    const publicUrl = process.env.R2_PUBLIC_URL?.trim().replace(/^["'](.+)["']$/, "$1");
+    const publicUrlStr = (process.env.R2_PUBLIC_URL || "").trim().replace(/^["'](.+)["']$/, "$1").replace(/\/$/, "");
+    const r2EndpointStr = (process.env.R2_ENDPOINT || "").trim().replace(/^["'](.+)["']$/, "$1");
 
     console.log("R2 ENV CHECK:", {
       hasEndpoint: !!endpoint,
       hasAccessKey: !!accessKeyId,
       hasSecret: !!secretAccessKey,
       hasBucket: !!bucket,
-      hasPublicUrl: !!publicUrl,
+      hasPublicUrl: !!publicUrlStr,
       endpoint,
       bucket,
     });
@@ -73,9 +74,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ContentType: file.mimetype || "image/jpeg",
     }));
 
-    const url = publicUrl
-      ? `${publicUrl.replace(/\/$/, "")}/${fileName}`
-      : `${endpoint}/${bucket}/${fileName}`;
+    let url = "";
+    if (publicUrlStr) {
+      url = `${publicUrlStr}/${fileName}`;
+    } else {
+      url = `${r2EndpointStr}/${bucket}/${fileName}`;
+    }
 
     console.log("Upload success:", url);
     return res.status(200).json({ success: true, url, key: fileName });

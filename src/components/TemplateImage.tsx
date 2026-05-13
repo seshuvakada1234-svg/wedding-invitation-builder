@@ -32,11 +32,18 @@ export default function TemplateImage({
   const url = isObject ? (image as EditableImage).url : (image as string);
   
   const fallbackUrl = "https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=800&h=600&fit=crop&auto=format";
-  const finalUrl = url || fallbackUrl;
+  
+  // If we have something but it's not a URL (like null, empty string, or a placeholder)
+  // we might want to show the fallback or a placeholder.
+  // However, for public sites, we prefer to show nothing or the fallback.
+  const finalUrl = url && url.length > 5 ? url : null;
 
   const renderImage = () => {
+    if (!finalUrl && !isObject) return null;
+    
     if (isObject) {
       const edit = image as EditableImage;
+      const imageUrl = edit.url || fallbackUrl;
       const hasDimensions = edit.width !== undefined && edit.height !== undefined;
       
       const posX = hasDimensions && edit.width! < 100 
@@ -49,7 +56,7 @@ export default function TemplateImage({
 
       return (
         <img
-          src={url || fallbackUrl}
+          src={imageUrl}
           alt={alt}
           className="w-full h-full"
           style={{
@@ -58,7 +65,9 @@ export default function TemplateImage({
             transform: `scale(${edit.scale || 1})`,
             transformOrigin: "center center",
           }}
+          referrerPolicy="no-referrer"
           onError={(e) => {
+            console.error("Image load failed:", imageUrl);
             e.currentTarget.src = fallbackUrl;
           }}
         />
@@ -67,10 +76,12 @@ export default function TemplateImage({
 
     return (
       <img
-        src={finalUrl}
+        src={finalUrl || fallbackUrl}
         alt={alt}
         className="w-full h-full object-cover"
+        referrerPolicy="no-referrer"
         onError={(e) => {
+          console.error("Image load failed:", finalUrl);
           e.currentTarget.src = fallbackUrl;
         }}
       />
@@ -80,9 +91,9 @@ export default function TemplateImage({
   if (!isEditable) {
     return (
       <div className={`overflow-hidden ${className}`}>
-        {!url && !isObject ? (
+        {(!finalUrl && !isObject) ? (
           <div className="w-full h-full bg-neutral-100 flex items-center justify-center">
-            <Camera className="w-8 h-8 text-neutral-300" />
+            <Camera className="w-8 h-8 text-neutral-200" />
           </div>
         ) : renderImage()}
       </div>
