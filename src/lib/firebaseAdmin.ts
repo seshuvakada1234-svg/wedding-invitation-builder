@@ -153,5 +153,7 @@ export const adminDb =
     ? getFirestore(adminApp, dbId)
     : getFirestore(adminApp);
 
+adminDb.settings({ ignoreUndefinedProperties: true });
+
 export const adminAuth = admin.auth(adminApp);
 export default adminApp;

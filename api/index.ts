@@ -48,7 +48,7 @@ function normalizeInvitationImages(data: any): any {
   const publicUrl = (process.env.R2_PUBLIC_URL || "").trim().replace(/^["'](.+)["']$/, "$1").replace(/\/$/, "");
   
   const fixUrl = (val: any): any => {
-    if (!val) return val;
+    if (val === undefined || val === null) return val;
     
     // If it's an EditableImage object
     if (typeof val === "object" && val.url) {
@@ -64,8 +64,8 @@ function normalizeInvitationImages(data: any): any {
       if (val.startsWith("http://localhost") || val.startsWith("http://127.0.0.1")) return null;
       
       // 3. Fix internal R2 endpoint URLs to use public CDN if available
-      const r2Endpoint = process.env.R2_ENDPOINT?.trim().replace(/^["'](.+)["']$/, "$1") || "";
-      const bucket = process.env.R2_BUCKET?.trim().replace(/^["'](.+)["']$/, "$1") || "";
+      const r2Endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["'](.+)["']$/, "$1");
+      const bucket = (process.env.R2_BUCKET || "").trim().replace(/^["'](.+)["']$/, "$1");
       
       if (publicUrl && (val.includes(r2Endpoint) || val.includes(".r2.cloudflarestorage.com"))) {
         // Extract the key part (usually users/userId/inviteId/timestamp-name.ext)
@@ -112,6 +112,37 @@ function normalizeInvitationImages(data: any): any {
   }
 
   return newData;
+}
+
+/**
+ * Recursively removes undefined values from an object or array to prevent Firestore crashes.
+ */
+function sanitizeFirestoreData(data: any): any {
+  if (data === undefined) return null;
+  if (data === null || typeof data !== 'object') return data;
+  
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeFirestoreData(item));
+  }
+  
+  const sanitized: Record<string, any> = {};
+  for (const key in data) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      const value = data[key];
+      // Force empty image fields to empty string instead of undefined
+      if (key === 'image' && (value === undefined || value === null)) {
+        sanitized[key] = "";
+        continue;
+      }
+      
+      if (value !== undefined) {
+        sanitized[key] = sanitizeFirestoreData(value);
+      } else {
+        sanitized[key] = null;
+      }
+    }
+  }
+  return sanitized;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -198,8 +229,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const tokenUserId = await verifyUser(req as any);
       const { id, ...data } = req.body;
       if (!id) return res.status(400).json({ success: false, error: "ID required" });
+      
+      const sanitizedData = sanitizeFirestoreData(data);
+      
       await adminDb.collection("invites").doc(id).set(
-        { ...data, userId: tokenUserId, slug: id, published: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+        { ...sanitizedData, userId: tokenUserId, slug: id, published: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
         { merge: true }
       );
       return res.json({ success: true });
@@ -240,9 +274,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       const normalizedSaveData = normalizeInvitationImages(data);
+      const sanitizedData = sanitizeFirestoreData(normalizedSaveData);
       
       await adminDb.collection("invites").doc(id).set(
-        { ...normalizedSaveData, template, userId: tokenUserId, isPaid: true, slug: id, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
+        { ...sanitizedData, template, userId: tokenUserId, isPaid: true, slug: id, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
         { merge: true }
       );
       return res.json({ success: true });

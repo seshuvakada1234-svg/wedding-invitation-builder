@@ -107,6 +107,7 @@ export default function Builder() {
       date: "TBD",
       time: "TBD",
       location: "TBD",
+      image: "",
     })),
     viewLimit: 500,
     views: 0,
@@ -516,7 +517,7 @@ export default function Builder() {
   const addEvent = () => {
     setFormData((prev) => ({
       ...prev,
-      events: [...(prev.events || []), { name: "New Event", date: "", time: "", location: "" }],
+      events: [...(prev.events || []), { name: "New Event", date: "", time: "", location: "", image: "" }],
     }));
   };
 
