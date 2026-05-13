@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { auth, authFetch } from "../lib/firebase";
 import { WeddingInvite } from "../types";
 import toast from "react-hot-toast";
+import SEO from "../components/SEO";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -90,7 +91,7 @@ export default function Dashboard() {
         key: razorpayKeyId,
         amount: orderData.amount,
         currency: "INR",
-        name: "Union Digital",
+        name: "Wedding Invitation",
         description: "Add 1000 Guest Views",
         order_id: orderData.order.id,
         handler: async function(response: any) {
@@ -128,7 +129,7 @@ export default function Dashboard() {
           email: auth.currentUser?.email || "",
           name: auth.currentUser?.displayName || "",
         },
-        theme: { color: "#000000" }
+        theme: { color: "#C8A96B" }
       };
 
       const rzp = new (window as any).Razorpay(options);
@@ -150,24 +151,25 @@ export default function Dashboard() {
 
   return (
     <div className="flex-1 py-12 px-6 lg:px-8 max-w-6xl mx-auto w-full">
+      <SEO title="User Dashboard" description="Manage your luxury cinematic wedding invitations, track RSVPs, and monitor guest views." />
       <div className="flex justify-between items-end mb-12">
         <div>
-          <h1 className="text-4xl font-serif italic mb-2">Your Unions</h1>
-          <p className="text-sm text-editorial-secondary">Manage and track your wedding invitation sites.</p>
+          <h1 className="text-4xl font-serif italic mb-2">Your Stories</h1>
+          <p className="text-sm text-editorial-secondary">Manage and experience your cinematic invitation stories.</p>
         </div>
         <button 
           onClick={() => navigate('/')}
           className="editorial-button flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          <span>New Site</span>
+          <span>Create Your Story</span>
         </button>
       </div>
 
       <div className="grid gap-6">
         {sites.length === 0 ? (
           <div className="editorial-card p-20 text-center bg-white">
-            <h3 className="font-serif italic text-2xl mb-4 text-editorial-muted">No unions started yet.</h3>
+            <h3 className="font-serif italic text-2xl mb-4 text-editorial-muted">No stories started yet.</h3>
             <button 
               onClick={() => navigate('/')}
               className="editorial-button"
@@ -237,12 +239,12 @@ export default function Dashboard() {
                   <div className="flex items-center gap-2">
                     <ExternalLink className="w-4 h-4 text-editorial-muted" />
                     <a 
-                      href={`/invite/${site.id || site.slug}`} 
+                      href={`/story/${site.id || site.slug}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="font-mono text-editorial-accent hover:underline"
+                      className="font-mono text-editorial-accent hover:underline lowercase"
                     >
-                      union.com/invite/{site.id || site.slug}
+                      /story/{site.id || site.slug}
                     </a>
                   </div>
                 </div>

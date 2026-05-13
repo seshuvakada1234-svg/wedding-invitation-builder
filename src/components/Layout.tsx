@@ -10,6 +10,8 @@ import { auth, logout } from "../lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import toast from "react-hot-toast";
 
+import { isAdminUser } from "../lib/auth";
+
 export default function Layout() {
   const navigate = useNavigate();
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -39,18 +41,22 @@ export default function Layout() {
       <nav className="h-16 border-b border-editorial-border bg-white z-50 sticky top-0">
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between w-full">
           <div className="flex items-center gap-12">
-            <Link to="/" className="flex items-center gap-2 group">
-              <Heart className="w-5 h-5 text-editorial-accent fill-editorial-accent transition-transform group-hover:scale-110" />
-              <span className="font-serif italic text-2xl tracking-tighter text-editorial-ink">Union.</span>
+            <Link to="/" className="flex items-center gap-3 group">
+              <div className="w-8 h-8 rounded-full bg-editorial-accent flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-500">
+                <Heart className="w-4 h-4 fill-white" />
+              </div>
+              <span className="font-serif italic text-2xl tracking-tighter text-editorial-ink">Wedding Invitation</span>
             </Link>
             
             <div className="hidden md:flex gap-8 text-sm font-medium text-editorial-secondary">
-              <Link to="/templates" className="hover:text-editorial-ink transition-colors">Templates</Link>
+              <Link to="/templates" className="hover:text-editorial-ink transition-colors">Luxury Templates</Link>
               <Link to="/pricing" className="hover:text-editorial-ink transition-colors">Pricing</Link>
               {user && (
                 <>
                   <Link to="/dashboard" className="hover:text-editorial-ink transition-colors">Dashboard</Link>
-                  <Link to="/admin" className="hover:text-editorial-ink transition-colors text-editorial-muted/70 hover:text-editorial-ink">Admin</Link>
+                  {isAdminUser(user?.email) && (
+                    <Link to="/admin" className="hover:text-editorial-ink transition-colors text-editorial-muted/70 hover:text-editorial-ink">Admin</Link>
+                  )}
                 </>
               )}
             </div>
@@ -92,13 +98,19 @@ export default function Layout() {
       </main>
 
       {/* Footer */}
-      <footer className="py-12 border-t border-editorial-border bg-white text-center">
+      <footer className="py-20 border-t border-editorial-border bg-white text-center">
         <div className="max-w-7xl mx-auto px-8">
-          <p className="font-serif italic text-xl mb-4 text-editorial-ink">Made with love for the digital union.</p>
-          <div className="text-[10px] uppercase tracking-[0.2em] text-editorial-muted flex items-center justify-center gap-6">
-            <span>Privacy</span>
+          <p className="font-serif italic text-2xl mb-6 text-editorial-ink">Wedding Invitation — The World's Most Premium Invitation Suite</p>
+          <p className="text-[10px] uppercase tracking-[0.3em] text-editorial-muted mb-12 max-w-2xl mx-auto leading-relaxed">
+            Crafting cinematic digital experiences for modern love stories. Designed for luxury, powered by AI.
+          </p>
+          <div className="text-[10px] uppercase tracking-[0.2em] text-editorial-muted flex flex-wrap items-center justify-center gap-x-8 gap-y-4">
+            <span className="font-bold text-editorial-accent uppercase">Wedding Invitation</span>
+            <Link to="/templates" className="hover:text-editorial-ink transition-colors">Templates</Link>
+            <Link to="/pricing" className="hover:text-editorial-ink transition-colors">Pricing</Link>
+            <span>Privacy Policy</span>
             <span>Terms of Service</span>
-            <span>Help Center</span>
+            <span>Support</span>
           </div>
         </div>
       </footer>

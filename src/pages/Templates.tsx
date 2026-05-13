@@ -19,6 +19,7 @@ import {
 } from "firebase/firestore";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import toast from "react-hot-toast";
+import SEO from "../components/SEO";
 
 export default function TemplatesPage() {
   const navigate = useNavigate();
@@ -123,6 +124,10 @@ export default function TemplatesPage() {
 
   return (
     <div className="min-h-screen py-20 px-6 lg:px-8 max-w-6xl mx-auto w-full">
+      <SEO 
+        title="Luxury Wedding Invitation Templates"
+        description="Browse our collection of cinematic wedding invitation templates. Premium Indian wedding designs, modern minimalist styles, and AI-powered storytelling."
+      />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-16 gap-8">
         <div className="max-w-2xl">
           <div className="flex items-center gap-3 text-editorial-accent mb-4">
@@ -132,11 +137,11 @@ export default function TemplatesPage() {
             </span>
           </div>
           <h1 className="text-5xl md:text-7xl font-serif italic mb-6 leading-none">
-            Choose your <br /> wedding aesthetic.
+            Choose your <br /> cinematic aesthetic.
           </h1>
-          <p className="text-editorial-secondary leading-relaxed">
+          <p className="text-editorial-secondary leading-relaxed font-editorial italic text-lg">
             From modern minimalism to royal heritage, our templates are designed
-            to be as unique as your union. All templates are fully customizable.
+            to be as unique as your story. All experiences are fully customizable.
           </p>
         </div>
         <div className="flex items-center gap-3 py-2 px-4 bg-editorial-bg rounded-lg border border-editorial-border">
@@ -157,57 +162,62 @@ export default function TemplatesPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.1 }}
-              className={`group cursor-pointer ${isLoading ? "pointer-events-none opacity-70" : ""}`}
+              className={`group relative overflow-hidden rounded-[32px] shadow-xl cursor-pointer transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl ${isLoading ? "pointer-events-none opacity-70" : ""}`}
               onClick={() => handleTemplateClick(tpl.id)}
             >
-              <div className="relative aspect-[4/5] bg-editorial-bg rounded-2xl overflow-hidden mb-6 border border-editorial-border group-hover:border-editorial-accent transition-colors shadow-sm group-hover:shadow-xl group-hover:-translate-y-1 transition-all">
+              <div className="relative aspect-[3/4] overflow-hidden bg-editorial-bg">
+                {/* Fallback & Background Image while iframe loads */}
                 <img
-                  src={tpl.thumbnail}
+                  src={tpl.previewImage}
                   alt={tpl.name}
-                  className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110 opacity-90 group-hover:opacity-100"
+                  className="w-full h-full object-cover transition-opacity duration-1000 opacity-20 group-hover:opacity-40"
+                  loading="lazy"
                 />
 
-                {/* Loading overlay */}
-                {isLoading && (
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                    <Loader2 className="w-8 h-8 text-white animate-spin" />
+                {/* Live Preview Iframe */}
+                <div className="absolute inset-0 pointer-events-none">
+                  <iframe
+                    src={`/preview/${tpl.id}`}
+                    className="absolute top-0 left-0 w-[300%] h-[300%] scale-[0.3333] origin-top-left transition-transform duration-700 group-hover:scale-[0.35]"
+                    loading="lazy"
+                    title={tpl.name}
+                    scrolling="no"
+                  />
+                </div>
+
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-8">
+                  {isLoading ? (
+                    <div className="flex items-center gap-2 text-white/80">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-xs font-bold uppercase tracking-widest">Opening...</span>
+                    </div>
+                  ) : (
+                    <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                      <p className="text-white/60 text-[10px] font-bold uppercase tracking-[0.3em] mb-2">
+                        Premium Collection
+                      </p>
+                      <h3 className="text-white text-3xl font-serif italic mb-4 leading-tight">
+                        {tpl.name}
+                      </h3>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white/90 text-sm font-medium">
+                          ₹{prices[tpl.id] ?? tpl.price} Access
+                        </span>
+                        <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 group-hover:bg-white group-hover:text-black transition-all">
+                          <ArrowRight className="w-5 h-5" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {tpl.category === 'premium' && (
+                  <div className="absolute top-6 left-6">
+                    <span className="bg-editorial-accent text-white px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                      Signature
+                    </span>
                   </div>
                 )}
-
-                <div className="absolute inset-x-0 bottom-0 p-8 bg-gradient-to-t from-black/80 via-black/40 to-transparent translate-y-4 group-hover:translate-y-0 transition-transform opacity-0 group-hover:opacity-100">
-                  <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest mb-2 font-sans">
-                    {isLoading ? "Opening..." : "Use This Template"}
-                  </p>
-                  <div className="flex justify-between items-end">
-                    <h3 className="text-white text-3xl font-serif italic">
-                      {tpl.name}
-                    </h3>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-xl font-serif italic mb-1">{tpl.name}</h2>
-                  <p className="text-[10px] uppercase font-bold tracking-widest text-editorial-muted">
-                    ₹{prices[tpl.id] ?? tpl.price} One-time activation
-                  </p>
-                </div>
-                <button
-                  onClick={(e) => {
-                    // Stop the card's onClick from also firing
-                    e.stopPropagation();
-                    handleTemplateClick(tpl.id);
-                  }}
-                  disabled={isLoading}
-                  className="w-12 h-12 bg-editorial-ink rounded-full flex items-center justify-center text-white hover:bg-black transition-all group-hover:scale-110 active:scale-95 disabled:opacity-60"
-                >
-                  {isLoading ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <ArrowRight className="w-5 h-5" />
-                  )}
-                </button>
               </div>
             </motion.div>
           );

@@ -8,15 +8,12 @@ import {
   User,
 } from "firebase/auth";
 
-export const ADMIN_EMAILS = [
-  "resumepro.ads@gmail.com",
-  "seshuvakada1234@gmail.com",
-];
+import { isAdminUser } from "./auth";
 
 export type UserRole = "admin" | "user";
 
 export function getUserRole(email: string | null | undefined): UserRole {
-  if (email && ADMIN_EMAILS.includes(email.toLowerCase())) return "admin";
+  if (isAdminUser(email)) return "admin";
   return "user";
 }
 

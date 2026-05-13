@@ -9,6 +9,7 @@ import { motion } from "motion/react";
 import { useState, useEffect } from "react";
 import { auth, authFetch } from "../lib/firebase";
 import toast from "react-hot-toast";
+import SEO from "../components/SEO";
 
 import { calculateFreeViews } from "../lib/pricing";
 
@@ -82,8 +83,8 @@ export default function Pricing() {
         key: razorpayKeyId,
         amount: order.amount,
         currency: order.currency,
-        name: "Wedding Invitations",
-        description: "One-time payment for premium invitation access",
+        name: "Wedding Invitation",
+        description: "One-time payment for your cinematic love story.",
         order_id: order.id,
         modal: {
           ondismiss: () => {
@@ -135,16 +136,20 @@ export default function Pricing() {
 
   return (
     <div className="py-24 px-6 lg:px-8 max-w-4xl mx-auto w-full">
+      <SEO 
+        title="Luxury Wedding Invitation Pricing"
+        description="Premium digital wedding invitations with RSVP, guest management, and cinematic storytelling. View our affordable one-time payment plans."
+      />
       <div className="text-center mb-16">
         <motion.h1 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="text-5xl font-serif italic mb-6 leading-tight"
         >
-          Unlock Your <span className="text-editorial-accent">Wedding Invitation</span>
+          Unlock Your <span className="text-editorial-accent">Cinematic Story</span>
         </motion.h1>
-        <p className="text-editorial-secondary max-w-xl mx-auto text-lg leading-relaxed">
-          Create, customize, and share your perfect digital invitation with our premium tools and support.
+        <p className="text-editorial-secondary max-w-xl mx-auto text-lg leading-relaxed font-editorial">
+          Experience world-class digital invitations where elegance meets storytelling. One-time payment, valid forever.
         </p>
       </div>
 

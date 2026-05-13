@@ -1,6 +1,7 @@
 import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getTemplateById } from "../templates";
+import SEO from "../components/SEO";
 
 export default function Site() {
   const { id } = useParams<{ id: string }>();
@@ -17,10 +18,10 @@ export default function Site() {
         if (result.success && result.invite) {
           setInvite(result.invite);
         } else {
-          setError("Invitation not found");
+          setError("Story not found");
         }
       } catch (err) {
-        setError("Failed to load invitation");
+        setError("Failed to load story");
       } finally {
         setLoading(false);
       }
@@ -36,7 +37,7 @@ export default function Site() {
 
   if (error || !invite) return (
     <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-500">{error || "Invitation not found"}</p>
+      <p className="text-gray-500">{error || "Story not found"}</p>
     </div>
   );
 
@@ -45,7 +46,7 @@ export default function Site() {
       <div className="max-w-md bg-white p-12 rounded-2xl shadow-xl editorial-card">
         <h2 className="text-3xl font-serif italic mb-4">View Limit Reached</h2>
         <p className="text-editorial-muted mb-8 text-sm leading-relaxed">
-          This premium invitation has reached its allocated view limit. 
+          This cinematic invitation has reached its allocated view limit. 
           If you are the host, please visit your dashboard to top up views and keep your celebration accessible.
         </p>
         <div className="space-y-4">
@@ -78,29 +79,36 @@ export default function Site() {
   );
 
   return (
-    <TemplateComponent
-      brideName={d.brideName || ""}
-      groomName={d.groomName || ""}
-      date={d.weddingDate || ""}
-      venue={d.location || ""}
-      venueAddress={d.venueAddress}
-      venueCity={d.venueCity}
-      googleMapsLink={d.googleMapsLink}
-      googleMapsEmbedUrl={d.googleMapsLink}
-      coordinates={d.coordinates}
-      story={d.story}
-      enable3D={d.enable3D}
-      enableEnvelope={d.enableEnvelope}
-      coverImage={d.coverImage}
-      events={d.events || []}
-      galleryImages={d.galleryImages || []}
-      deity={d.deity}
-      eventName={d.eventName}
-      muhurtham={d.muhurtham}
-      family={d.family}
-      hosts={{ primary: d.brideName || "", secondary: d.groomName || "" }}
-      address={d.venueAddress || d.location}
-      image={d.coverImage}
-    />
+    <>
+      <SEO 
+        title={`${d.brideName} & ${d.groomName}'s Wedding Invitation`}
+        description={`You are cordially invited to celebrate the wedding of ${d.brideName} and ${d.groomName} on ${d.weddingDate}. View the cinematic story here.`}
+        ogImage={typeof d.coverImage === 'string' ? d.coverImage : d.coverImage?.url}
+      />
+      <TemplateComponent
+        brideName={d.brideName || ""}
+        groomName={d.groomName || ""}
+        date={d.weddingDate || ""}
+        venue={d.location || ""}
+        venueAddress={d.venueAddress}
+        venueCity={d.venueCity}
+        googleMapsLink={d.googleMapsLink}
+        googleMapsEmbedUrl={d.googleMapsLink}
+        coordinates={d.coordinates}
+        story={d.story}
+        enable3D={d.enable3D}
+        enableEnvelope={d.enableEnvelope}
+        coverImage={d.coverImage}
+        events={d.events || []}
+        galleryImages={d.galleryImages || []}
+        deity={d.deity}
+        eventName={d.eventName}
+        muhurtham={d.muhurtham}
+        family={d.family}
+        hosts={{ primary: d.brideName || "", secondary: d.groomName || "" }}
+        address={d.venueAddress || d.location}
+        image={d.coverImage}
+      />
+    </>
   );
 }

@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from "@vercel/node";
 import { adminDb } from "../src/lib/firebaseAdmin.js";
-import { verifyUser } from "../src/lib/auth.js";
+import { verifyUser, verifyAdmin } from "../src/lib/authServer.js";
 import admin from "firebase-admin";
 import Razorpay from "razorpay";
 import crypto from "crypto";
@@ -164,6 +164,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true });
     }
 
+    // ── Admin: Get All Invites ───────────────────────────────────────────────
+    if (path === "/api/admin/all-invites" && method === "GET") {
+      try {
+        await verifyAdmin(req as any);
+        const snapshot = await adminDb.collection("invites").orderBy("updatedAt", "desc").get();
+        const invites = snapshot.docs.map(doc => ({ id: doc.id, ...serializeFirestoreData(doc.data()) }));
+        return res.json({ success: true, invites });
+      } catch (error: any) {
+        return res.status(error.message === "UNAUTHORIZED" ? 403 : 500).json({ success: false, error: error.message });
+      }
+    }
+
+    // ── Admin: Delete Invite ──────────────────────────────────────────────────
+    if (path.startsWith("/api/admin/invite/") && method === "DELETE") {
+      try {
+        await verifyAdmin(req as any);
+        const id = path.split("/").pop();
+        if (!id) return res.status(400).json({ success: false, error: "ID required" });
+        await adminDb.collection("invites").doc(id).delete();
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(error.message === "UNAUTHORIZED" ? 403 : 500).json({ success: false, error: error.message });
+      }
+    }
+
+    // ── Admin: Unpublish Invite ───────────────────────────────────────────────
+    if (path.includes("/unpublish") && method === "PATCH") {
+      try {
+        await verifyAdmin(req as any);
+        const id = path.replace("/api/admin/invite/", "").replace("/unpublish", "");
+        if (!id) return res.status(400).json({ success: false, error: "ID required" });
+        await adminDb.collection("invites").doc(id).update({
+          isPaid: false,
+          published: false,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return res.json({ success: true });
+      } catch (error: any) {
+        return res.status(error.message === "UNAUTHORIZED" ? 403 : 500).json({ success: false, error: error.message });
+      }
+    }
+
     // ── POST /api/create-order ──
     if (path === "/api/create-order" && method === "POST") {
       const { templateId } = req.body;
@@ -257,7 +299,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // ── POST /api/upload ──
     if (path === "/api/upload" && method === "POST") {
-      const form = formidable({ maxFileSize: 10 * 1024 * 1024 });
+      const form = formidable({ 
+        maxFileSize: 50 * 1024 * 1024,
+        maxTotalFileSize: 50 * 1024 * 1024
+      });
       const [fields, files] = await form.parse(req as any);
       const file = Array.isArray(files.file) ? files.file[0] : files.file;
       if (!file) return res.status(400).json({ success: false, error: "No file" });

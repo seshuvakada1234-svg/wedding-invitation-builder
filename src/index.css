@@ -1,18 +1,21 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-serif: "Playfair Display", ui-serif, Georgia, serif;
+  --font-editorial: "Cormorant Garamond", serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-editorial-bg: #F9F7F2;
-  --color-editorial-ink: #2D2D2D;
+  --color-editorial-bg: #F8F6F2;
+  --color-editorial-ink: #1F2A44;
   --color-editorial-secondary: #6B665E;
   --color-editorial-muted: #9E978C;
   --color-editorial-border: #E5E1D8;
-  --color-editorial-accent: #C48F5B;
+  --color-editorial-accent: #C8A96B;
   --color-editorial-surface: #FFFFFF;
+  --color-editorial-navy: #0F172A;
+  --color-editorial-navy-light: #111827;
 }
 
 @layer base {

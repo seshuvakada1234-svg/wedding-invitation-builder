@@ -210,7 +210,7 @@ export default function KeralaRevealTemplate({
           
           <div className="relative z-10 px-4 pointer-events-none">
             <motion.p initial={{ opacity: 0, y: 10 }} whileInView={{ opacity: 1, y: 0 }} className="text-[10px] md:text-xs uppercase tracking-[0.5em] mb-4 opacity-80">
-              The Wedding of
+              The Celebration of
             </motion.p>
             <motion.h1 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} className="text-5xl md:text-8xl font-serif mb-6 leading-tight">
               {brideName} <span className="text-[#FBC02D] italic">&amp;</span> {groomName}
@@ -375,7 +375,7 @@ export default function KeralaRevealTemplate({
               </p>
 
               <div className="text-[9px] uppercase tracking-[0.2em] text-neutral-700">
-                Created with Love &bull; Wedding Builder
+                Created with Love &bull; Wedding Invitation
               </div>
            </motion.div>
         </footer>

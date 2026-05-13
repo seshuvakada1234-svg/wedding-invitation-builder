@@ -8,6 +8,7 @@ import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
 import Builder from "./pages/Builder";
+import Activate from "./pages/Activate";
 import Preview from "./pages/Preview";
 import Site from "./pages/Site";
 import Admin from "./pages/Admin";
@@ -54,9 +55,9 @@ export default function App() {
               </ProtectedRoute>
             } />
 
-            <Route path="preview/:slug" element={
+            <Route path="activate/:slug" element={
               <ProtectedRoute>
-                <Preview />
+                <Activate />
               </ProtectedRoute>
             } />
 
@@ -67,6 +68,8 @@ export default function App() {
             } />
           </Route>
 
+          <Route path="/preview/:templateId" element={<Preview />} />
+          <Route path="/story/:id" element={<Site />} />
           <Route path="/invite/:id" element={<Site />} />
           <Route path="/site/:id" element={<Site />} />
           <Route path="/wedding/:id" element={<Site />} />

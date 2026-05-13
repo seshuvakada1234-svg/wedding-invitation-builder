@@ -20,8 +20,9 @@ import {
   where 
 } from "firebase/firestore";
 import { logout } from "../lib/clientAuth";
+import { isAdminUser } from "../lib/auth";
 import { WeddingInvite } from "../types";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import toast from "react-hot-toast";
 
 type Tab = "overview" | "invitations" | "payments" | "images" | "templates";
@@ -34,10 +35,7 @@ interface Stats {
 }
 
 const TEMPLATES = [
-  { id: "minimal",                label: "Minimal Royal" },
   { id: "royal-wedding",          label: "Indian Royal Wedding" },
-  { id: "royal",                  label: "Grand Manor" },
-  { id: "beach",                  label: "Coastal Bliss" },
   { id: "konaseema",              label: "Konaseema Heritage" },
   { id: "kerala-wedding",         label: "Kerala Wedding" },
   { id: "kerala-envelope-reveal", label: "Kerala Envelope Reveal" },
@@ -66,11 +64,12 @@ function formatDate(val: any): string {
 
 export default function Admin() {
   const [invites, setInvites] = useState<WeddingInvite[]>([]);
-  const [payments, setPayments] = useState<any[]>([]); // New state for real payments
+  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
   const [search, setSearch] = useState("");
   const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState(auth.currentUser);
 
   // Dynamic Real-time Stats
   const [liveStats, setLiveStats] = useState<Stats>({
@@ -85,12 +84,6 @@ export default function Admin() {
   const [saving, setSaving]   = useState<string | null>(null);
 
   const unsubs = useRef<(() => void)[]>([]);
-
-  async function fetchAllInvites() {
-    // We rely on onSnapshot for the list, so this just marks loading as done 
-    // or we can keep it if we want to ensure initial load
-    setLoading(false);
-  }
 
   async function loadPrices() {
     try {
@@ -148,13 +141,14 @@ export default function Admin() {
 
   useEffect(() => {
     const unsubAuth = auth.onAuthStateChanged((user) => {
+      setCurrentUser(user);
       // Clear previous listeners
       unsubs.current.forEach(u => u());
       unsubs.current = [];
 
-      if (user) {
-        fetchAllInvites();
+      if (user && isAdminUser(user.email)) {
         loadPrices();
+        setLoading(false);
         
         // 1. Live Users Count
         const u1 = onSnapshot(collection(db, "users"), (snap) => {
@@ -217,7 +211,6 @@ export default function Admin() {
     };
   }, []);
 
-
   async function handleDelete(id: string) {
     if (!confirm("Delete this invitation permanently?")) return;
     try {
@@ -262,6 +255,10 @@ export default function Admin() {
     );
   }
 
+  if (!isAdminUser(currentUser?.email)) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <div className="flex min-h-screen bg-editorial-bg">
       {/* ── Sidebar ── */}
@@ -270,7 +267,7 @@ export default function Admin() {
           <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold mb-1">
             Admin Panel
           </p>
-          <h2 className="text-xl font-serif italic text-white">WedCraft</h2>
+          <h2 className="text-xl font-serif italic text-white uppercase tracking-tighter">Wedding Invitation</h2>
         </div>
 
         <nav className="flex-1 py-6 px-3 space-y-1">

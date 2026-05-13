@@ -11,7 +11,7 @@ dotenv.config();
 import cors from "cors";
 import admin from "firebase-admin";
 import { adminAuth, adminDb } from "./src/lib/firebaseAdmin.js";
-import { verifyUser } from "./src/lib/auth.js";
+import { verifyUser, verifyAdmin } from "./src/lib/authServer.js";
 import Razorpay from "razorpay";
 import crypto from "crypto";
 
@@ -279,11 +279,8 @@ async function startServer() {
     // ── Admin: All Invites ────────────────────────────────────────────────────
     app.get("/api/admin/all-invites", async (req, res) => {
       try {
-        const userId = await verifyUser(req);
-
-        // Simple admin check: restrict to your email or an admin collection
-        // For now, let's just allow it but log it
-        console.log(`Admin access attempt by ${userId}`);
+        const userId = await verifyAdmin(req);
+        console.log(`Admin access granted to ${userId}`);
 
         const db = getAdminDb();
         if (!db) throw new Error("DB not initialized");
@@ -295,6 +292,40 @@ async function startServer() {
         }));
 
         res.json({ success: true, invites });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // ── Admin: Delete Invite ──────────────────────────────────────────────────
+    app.delete("/api/admin/invite/:id", async (req, res) => {
+      try {
+        await verifyAdmin(req);
+        const { id } = req.params;
+        const db = getAdminDb();
+        if (!db) throw new Error("DB error");
+
+        await db.collection("invites").doc(id).delete();
+        res.json({ success: true });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // ── Admin: Unpublish Invite ───────────────────────────────────────────────
+    app.patch("/api/admin/invite/:id/unpublish", async (req, res) => {
+      try {
+        await verifyAdmin(req);
+        const { id } = req.params;
+        const db = getAdminDb();
+        if (!db) throw new Error("DB error");
+
+        await db.collection("invites").doc(id).update({
+          isPaid: false,
+          published: false,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        res.json({ success: true });
       } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
       }
@@ -852,6 +883,10 @@ async function startServer() {
     
     if (err.message === "UNAUTHENTICATED") {
       return res.status(401).json({ success: false, error: "UNAUTHENTICATED" });
+    }
+
+    if (err.message === "UNAUTHORIZED") {
+      return res.status(403).json({ success: false, error: "UNAUTHORIZED" });
     }
 
     const status = typeof err.status === 'number' && err.status >= 100 && err.status < 600 

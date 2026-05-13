@@ -515,7 +515,7 @@ export default function KonaseemaWeddingTemplate({
               transition={{ delay: 0.6 }}
               className="text-white/80 text-[10px] md:text-sm tracking-[0.3em] uppercase mb-4"
             >
-              The Union of
+              The Celebration of
             </motion.p>
 
             <motion.h1
@@ -635,7 +635,7 @@ export default function KonaseemaWeddingTemplate({
           <SectionReveal>
             <RangoliSVG color="#FBC02D" size={80} className="mx-auto mb-8 opacity-20 md:w-32 md:h-32" />
             <p className="text-[#FBC02D] font-serif italic text-2xl md:text-5xl mb-4">See You There!</p>
-            <p className="text-white/20 text-[9px] md:text-xs uppercase tracking-[0.4em]">Union Wedding Suites</p>
+            <p className="text-white/20 text-[9px] md:text-xs uppercase tracking-[0.4em]">Wedding Invitation Cinematic Suites</p>
           </SectionReveal>
         </footer>
 

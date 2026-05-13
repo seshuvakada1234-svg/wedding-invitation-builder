@@ -45,7 +45,7 @@ service cloud.firestore {
         && data.groomName is string && data.groomName.size() <= 100
         && data.weddingDate is string && data.weddingDate.size() <= 100
         && data.location is string && data.location.size() <= 200
-        && data.template in ['beach', 'royal', 'minimal', 'royal-wedding', 'konaseema', 'kerala-wedding', 'kerala-envelope-reveal', 'housewarming-south']
+        && data.template in ['royal-wedding', 'konaseema', 'kerala-wedding', 'kerala-envelope-reveal', 'housewarming-south']
         && data.views is number && data.views >= 0
         && data.viewLimit is number && data.viewLimit >= 0
         && data.slug is string && data.slug.size() <= 128

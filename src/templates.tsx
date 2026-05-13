@@ -39,6 +39,7 @@ export interface TemplateConfig {
   name: string;
   category?: 'classic' | 'premium' | 'modern';
   thumbnail: string;
+  previewImage: string;
   component: React.ComponentType<{
     brideName: string;
     groomName: string;
@@ -66,32 +67,9 @@ export const templates: TemplateConfig[] = [
     id: "royal-wedding",
     name: "Indian Royal Wedding",
     category: "classic",
-    thumbnail: "https://images.unsplash.com/photo-1519225497282-14337446bc77?auto=format&fit=crop&q=80&w=800",
+    thumbnail: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=800",
+    previewImage: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=1200",
     component: IndianRoyalWeddingTemplate,
-    price: 999
-  },
-  {
-    id: "minimal",
-    name: "Minimal Royal",
-    category: "modern",
-    thumbnail: "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800",
-    component: IndianRoyalWeddingTemplate,
-    price: 999
-  },
-  {
-    id: "royal",
-    name: "Grand Manor",
-    category: "classic",
-    thumbnail: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800",
-    component: IndianRoyalWeddingTemplate,
-    price: 999
-  },
-  {
-    id: "beach",
-    name: "Coastal Bliss",
-    category: "modern",
-    thumbnail: "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800",
-    component: KonaseemaWeddingTemplate,
     price: 999
   },
   {
@@ -99,6 +77,7 @@ export const templates: TemplateConfig[] = [
     name: "Konaseema Heritage",
     category: "classic",
     thumbnail: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=800",
+    previewImage: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=1200",
     component: KonaseemaWeddingTemplate,
     price: 899
   },
@@ -106,7 +85,8 @@ export const templates: TemplateConfig[] = [
     id: "kerala-wedding",
     name: "Kerala Wedding",
     category: "classic",
-    thumbnail: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=800",
+    thumbnail: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800",
+    previewImage: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=1200",
     component: KeralaWeddingTemplate,
     price: 949
   },
@@ -114,7 +94,8 @@ export const templates: TemplateConfig[] = [
     id: "kerala-envelope-reveal",
     name: "Kerala Envelope Reveal",
     category: "premium",
-    thumbnail: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=800",
+    thumbnail: "https://images.unsplash.com/photo-1607344645866-009c522b63e2?auto=format&fit=crop&q=80&w=800",
+    previewImage: "https://images.unsplash.com/photo-1607344645866-009c522b63e2?auto=format&fit=crop&q=80&w=1200",
     component: KeralaRevealTemplate,
     price: 1299
   },
@@ -123,6 +104,7 @@ export const templates: TemplateConfig[] = [
     name: "South Indian Housewarming",
     category: "premium",
     thumbnail: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?auto=format&fit=crop&q=80&w=800",
+    previewImage: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?auto=format&fit=crop&q=80&w=1200",
     component: SouthIndianHousewarmingTemplate,
     price: 1199
   }

@@ -151,7 +151,7 @@ export default function KeralaWeddingTemplate({
             transition={{ delay: 0.5, duration: 0.8 }}
             className="text-[#D4AF37] font-bold tracking-[0.4em] uppercase text-xs mb-4"
           >
-            Inviting You to The Wedding of
+            Inviting You to The Celebration of
           </motion.p>
           
           <motion.h1 

@@ -9,6 +9,7 @@ import { Heart, ArrowRight, Github } from "lucide-react";
 import { motion } from "motion/react";
 import { loginWithGoogle, getUserRole } from "../lib/clientAuth";
 import toast from "react-hot-toast";
+import SEO from "../components/SEO";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -57,6 +58,7 @@ export default function Login() {
   // ── UI stays exactly the same ──────────────────────────────
   return (
     <div className="flex-1 flex items-center justify-center p-8 bg-editorial-bg">
+      <SEO title="Member Login" description="Sign in to your Wedding Invitation dashboard to manage your cinematic invitations." />
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -68,7 +70,7 @@ export default function Login() {
                     <Heart className="w-8 h-8 text-editorial-accent fill-editorial-accent" />
                 </div>
                 <h1 className="text-4xl font-serif italic mb-2">Welcome Back</h1>
-                <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-editorial-muted">Continue your journey</p>
+                <p className="text-[10px] uppercase font-bold tracking-[0.2em] text-editorial-muted">Enter your cinematic story</p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6 text-left">
@@ -96,7 +98,7 @@ export default function Login() {
                 </div>
                 <div className="pt-4">
                   <button type="submit" className="w-full editorial-button flex items-center justify-center gap-2">
-                    <span>Sign In</span>
+                    <span>Enter Your Story</span>
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>

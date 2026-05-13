@@ -59,7 +59,6 @@ const TEMPLATE_DEFAULTS: Record<string, string[]> = {
   "kerala-wedding": ["Madhuramveypu", "Nischaayam", "Wedding", "Reception"],
   "kerala-envelope-reveal": ["Pellikuthuru", "Haldi", "Mehendi", "Wedding"],
   "housewarming-south": ["Gruha Pravesh", "Satyanarayana Vratham"],
-  minimal: ["Wedding Ceremony", "Reception"],
 };
 
 const GALLERY_DEFAULTS: Record<string, string[]> = {
@@ -82,7 +81,7 @@ export default function Builder() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const initialTemplate = (templateId || searchParams.get("template") || "minimal") as TemplateType;
+  const initialTemplate = (templateId || searchParams.get("template") || "royal-wedding") as TemplateType;
   const [isEditMode, setIsEditMode] = useState(!!inviteId);
 
   const [formData, setFormData] = useState<Partial<WeddingInvite>>({
@@ -123,7 +122,6 @@ export default function Builder() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [templatePrices, setTemplatePrices] = useState<Record<string, number>>({
-    "minimal": 499,
     "housewarming-south": 799,
     "kerala-wedding": 799,
     "konaseema": 999,
@@ -306,7 +304,7 @@ export default function Builder() {
           draftData: currentDraft,
           templateDrafts: {
             ...(formData.templateDrafts || {}),
-            [formData.template || "minimal"]: currentDraft
+            [formData.template || "royal-wedding"]: currentDraft
           },
           updatedAt: new Date().toISOString() as any,
           hasUnpublishedChanges: true,
@@ -502,7 +500,7 @@ export default function Builder() {
         <div className="text-center">
           <Loader2 className="w-12 h-12 text-editorial-accent animate-spin mx-auto mb-4" />
           <p className="text-xs uppercase tracking-[0.2em] text-editorial-muted font-bold">
-            {isFetchingInvite ? "Loading Invitation..." : "Preparing Studio..."}
+            {isFetchingInvite ? "Loading Story..." : "Preparing Your Cinematic Studio..."}
           </p>
         </div>
       </div>
@@ -656,9 +654,9 @@ export default function Builder() {
         finalAspect = 16 / 10;
       } else {
         // Default gallery aspects based on template
-        if (formData.template === "minimal") finalAspect = 1;
+        if (formData.template === "royal-wedding") finalAspect = 1;
         else if (formData.template === "kerala-envelope-reveal") finalAspect = 3 / 4;
-        else finalAspect = 4 / 5; // royal, konaseema, kerala, housewarming
+        else finalAspect = 4 / 5; // royal-wedding, konaseema, kerala, housewarming
       }
     }
 
@@ -774,7 +772,7 @@ export default function Builder() {
         });
         if (checkRes.ok) {
           const userData = await checkRes.json();
-          const currentTemplate = (formData.template || "minimal") as string;
+          const currentTemplate = (formData.template || "royal-wedding") as string;
           const normalizedTemplate = currentTemplate.toLowerCase().trim();
           isPaid = userData.paid === true || 
             (userData.paidTemplates && (
@@ -791,7 +789,7 @@ export default function Builder() {
       // Update template drafts before saving
       finalizedData.templateDrafts = {
         ...(formData.templateDrafts || {}),
-        [formData.template || "minimal"]: getCurrentDataAsDraft()
+        [formData.template || "royal-wedding"]: getCurrentDataAsDraft()
       };
       
       // For drafts, we generally don't perform production R2 uploads 
@@ -901,7 +899,7 @@ export default function Builder() {
         }
 
         const userData = await checkRes.json();
-        const currentTemplate = (formData.template || "minimal") as string;
+        const currentTemplate = (formData.template || "royal-wedding") as string;
         const normalizedTemplate = currentTemplate.toLowerCase().trim();
 
         const isTemplatePaid = userData.paid === true || 
@@ -934,7 +932,7 @@ export default function Builder() {
       
       const finalizedData = await uploadPendingImages(dataWithDrafts);
 
-      const currentTemplate = finalizedData.template || "minimal";
+      const currentTemplate = finalizedData.template || "royal-wedding";
       const id = isEditMode
         ? inviteId || finalizedData.slug || siteSlug
         : finalizedData.slug || finalizedData.id || Math.random().toString(36).substring(2, 10);
@@ -1017,7 +1015,7 @@ export default function Builder() {
       if (forceSaveAfterPayment) {
         setShowFinalSuccessModal(true);
       } else {
-        toast.success("🎉 Successfully Published!");
+        toast.success("🎉 Your Story is Live!");
         setTimeout(() => {
           window.location.href = `/invite/${id}`;
         }, 1500);
@@ -1049,7 +1047,7 @@ export default function Builder() {
     if (!currentUser || isProcessingPayment) return;
     setIsProcessingPayment(true);
   
-    const currentTemplate = formData.template || "minimal";
+    const currentTemplate = formData.template || "royal-wedding";
     const templatePrice = templatePrices[currentTemplate] || 999;
     const templatePricePaise = templatePrice * 100;
 
@@ -1086,7 +1084,7 @@ export default function Builder() {
         key: razorpayKeyId,
         amount: templatePricePaise,
         currency: "INR",
-        name: "Union Digital",
+        name: "Wedding Invitation",
         description: "Publish Your Invitation",
         order_id: order.id,
         handler: async function(response: any) {
@@ -1171,7 +1169,7 @@ export default function Builder() {
         key: razorpayKeyId,
         amount: orderData.amount,
         currency: "INR",
-        name: "Union Digital",
+        name: "Wedding Invitation",
         description: "Redeploy Your Invitation",
         order_id: orderData.order.id,
         handler: async function(response: any) {
@@ -1273,7 +1271,7 @@ export default function Builder() {
                   <Sparkles className="w-5 h-5 text-editorial-accent" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-serif italic">Design Suite</h1>
+                  <h1 className="text-xl font-serif italic">Wedding Invitation Studio</h1>
                   <p className="text-[9px] uppercase font-bold tracking-widest text-editorial-muted">
                     Editing: {templateConfig?.name}
                   </p>
@@ -1521,10 +1519,7 @@ export default function Builder() {
                       onChange={(e) => setFormData(prev => ({ ...prev, template: e.target.value as TemplateType }))}
                       className="editorial-input text-xs appearance-none bg-white font-medium"
                     >
-                      <option value="minimal">Minimal Royal</option>
-                      <option value="royal">Grand Manor</option>
                       <option value="royal-wedding">Indian Royal Wedding</option>
-                      <option value="beach">Coastal Bliss</option>
                       <option value="konaseema">Konaseema Heritage</option>
                       <option value="kerala-wedding">Kerala Wedding</option>
                       <option value="kerala-envelope-reveal">Kerala Envelope Reveal</option>
@@ -1667,7 +1662,7 @@ export default function Builder() {
                     <Rocket className="w-4 h-4" />
                   )}
                   <span className="text-[11px] font-bold uppercase tracking-[0.2em]">
-                    {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Invitation"}
+                    {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Story"}
                   </span>
                 </button>
               ) : hasUnpublishedChanges ? (
@@ -1706,7 +1701,7 @@ export default function Builder() {
               <div className="flex items-center gap-2 px-3 py-1.5 bg-editorial-bg rounded-lg border border-editorial-border">
                 <Globe className="w-3.5 h-3.5 text-editorial-muted" />
                 <span className="text-[10px] font-mono text-editorial-ink opacity-70">
-                  union.com/site/{siteSlug}
+                  /story/{siteSlug}
                 </span>
               </div>
 
@@ -1776,7 +1771,7 @@ export default function Builder() {
                   <button
                     onClick={() => handleSave()}
                     disabled={isSaving || isCheckingPayment}
-                    className="editorial-button bg-editorial-ink hover:bg-black text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(0,0,0,0.1)] hover:shadow-[0_0_25px_rgba(179,126,74,0.3)] transition-all group"
+                    className="editorial-button bg-editorial-ink hover:bg-black text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(0,0,0,0.1)] hover:shadow-[0_0_25px_rgba(200,169,107,0.3)] transition-all group"
                   >
                     {isSaving || isCheckingPayment ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1784,7 +1779,7 @@ export default function Builder() {
                       <Rocket className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                     )}
                     <span className="text-[10px] font-bold uppercase tracking-[0.2em]">
-                      {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish"}
+                      {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Story"}
                     </span>
                   </button>
                 ) : hasUnpublishedChanges ? (
@@ -1795,7 +1790,7 @@ export default function Builder() {
                       transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                       onClick={() => setShowRedeployModal(true)}
                       disabled={isSaving || isCheckingPayment}
-                      className="editorial-button bg-editorial-ink text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(179,126,74,0.3)] hover:shadow-[0_0_30px_rgba(179,126,74,0.5)] transition-all relative overflow-hidden group border border-editorial-accent/30"
+                      className="editorial-button bg-editorial-ink text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(200,169,107,0.3)] hover:shadow-[0_0_30px_rgba(200,169,107,0.5)] transition-all relative overflow-hidden group border border-editorial-accent/30"
                     >
                       <div className="absolute inset-0 bg-editorial-accent/20 animate-pulse" />
                       {isSaving || isCheckingPayment ? (
@@ -1803,7 +1798,7 @@ export default function Builder() {
                       ) : (
                         <RefreshCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-700" />
                       )}
-                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] relative z-10">Redeploy</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] relative z-10">Redeploy Story</span>
                     </motion.button>
                     <div className="absolute -top-3 -right-2 px-2 py-0.5 bg-editorial-accent text-white text-[8px] font-bold uppercase tracking-tighter rounded-full border-2 border-white shadow-xl pointer-events-none whitespace-nowrap z-20">
                       Changes Pending
@@ -1889,7 +1884,7 @@ export default function Builder() {
               <div className="absolute inset-x-0 bottom-10 flex justify-center">
                 <div className="bg-editorial-ink/10 backdrop-blur-md px-6 py-2 rounded-full border border-editorial-ink/5">
                   <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-editorial-ink opacity-30">
-                    Union Digital Draft
+                    Wedding Invitation Cinematic Draft
                   </span>
                 </div>
               </div>
@@ -1953,19 +1948,19 @@ export default function Builder() {
                 <div className="w-16 h-16 bg-editorial-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
                   <Rocket className="w-8 h-8 text-editorial-accent" />
                 </div>
-                <h2 className="text-3xl font-serif italic mb-2">Publish Your Invitation</h2>
+                <h2 className="text-3xl font-serif italic mb-2">Publish Your Story</h2>
                 <p className="text-xs uppercase tracking-widest text-editorial-muted">
                   {templateConfig?.name} Template
                 </p>
                 <div className="flex items-center justify-center gap-2 mt-4">
-                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹{templatePrices[formData.template || "minimal"] || 999}</span>
+                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹{templatePrices[formData.template || "royal-wedding"] || 999}</span>
                   <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted">One-time</span>
                 </div>
               </div>
 
               <div className="space-y-4 mb-10">
                 {[
-                  `Up to ${calculateFreeViews(templatePrices[formData.template || "minimal"] || 999)} views included`,
+                  `Up to ${calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 999)} views included`,
                   "Beautiful live website",
                   "Shareable link",
                   "WhatsApp sharing",
@@ -1989,10 +1984,10 @@ export default function Builder() {
                   ) : (
                     <Sparkles className="w-4 h-4" />
                   )}
-                  {isProcessingPayment ? "Processing..." : `Pay ₹${templatePrices[formData.template || "minimal"] || 999} & Publish`}
+                  {isProcessingPayment ? "Processing..." : `Pay ₹${templatePrices[formData.template || "royal-wedding"] || 999} & Publish`}
                 </button>
                 <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-widest bg-editorial-bg py-2 rounded-lg border border-editorial-border/40">
-                  AFTER {calculateFreeViews(templatePrices[formData.template || "minimal"] || 999)} VIEWS, TOP UP <span className="text-editorial-ink font-bold">₹99</span> TO GET <span className="text-editorial-ink font-bold">1000 MORE VIEWS</span>
+                  AFTER {calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 999)} VIEWS, TOP UP <span className="text-editorial-ink font-bold">₹99</span> TO GET <span className="text-editorial-ink font-bold">1000 MORE VIEWS</span>
                 </p>
               </div>
             </motion.div>
@@ -2102,7 +2097,7 @@ export default function Builder() {
                 <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-100">
                   <CheckCircle2 className="w-10 h-10 text-green-500" />
                 </div>
-                <h2 className="text-3xl font-serif italic mb-2">Your Invitation is Live! 🎉</h2>
+                <h2 className="text-3xl font-serif italic mb-2">Your Story is Live! 🎉</h2>
                 <p className="text-xs uppercase tracking-[0.2em] font-bold text-green-600">Payment successful</p>
               </div>
 
@@ -2111,11 +2106,11 @@ export default function Builder() {
                   <label className="text-[10px] font-bold uppercase tracking-widest text-editorial-muted mb-3 block">Live Link</label>
                   <div className="flex items-center gap-2 p-5 bg-editorial-bg border border-editorial-border rounded-2xl">
                     <span className="text-xs font-mono text-editorial-ink truncate flex-1 font-medium">
-                      {window.location.origin}/invite/{publishedInviteId}
+                      {window.location.origin}/story/{publishedInviteId}
                     </span>
                     <button 
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/invite/${publishedInviteId}`);
+                        navigator.clipboard.writeText(`${window.location.origin}/story/${publishedInviteId}`);
                         toast.success("Link copied!");
                       }}
                       className="p-2 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-editorial-border"
@@ -2124,18 +2119,18 @@ export default function Builder() {
                     </button>
                   </div>
                 </div>
-
+  
                 <div className="grid grid-cols-1 gap-3">
                   <button 
-                    onClick={() => window.open(`/invite/${publishedInviteId}`, '_blank')}
+                    onClick={() => window.open(`/story/${publishedInviteId}`, '_blank')}
                     className="flex items-center justify-center gap-3 py-4 bg-editorial-ink text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    Visit Live Site
+                    Visit Live Story
                   </button>
                   <button 
                     onClick={() => {
-                      const text = `Join us for our special day! ❤️ View our invitation here: ${window.location.origin}/invite/${publishedInviteId}`;
+                      const text = `Join us for our special day! ❤️ View our cinematic story here: ${window.location.origin}/story/${publishedInviteId}`;
                       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
                     }}
                     className="flex items-center justify-center gap-3 py-4 bg-[#25D366] text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg"
@@ -2180,9 +2175,9 @@ export default function Builder() {
                 <div className="w-16 h-16 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-green-100">
                   <CheckCircle2 className="w-8 h-8 text-green-500" />
                 </div>
-                <h2 className="text-3xl font-serif italic mb-2">Invite Published!</h2>
+                <h2 className="text-3xl font-serif italic mb-2">Story Published!</h2>
                 <p className="text-editorial-muted text-sm uppercase tracking-widest font-bold">
-                  Your digital union is live
+                  Your cinematic story is live
                 </p>
               </div>
 
@@ -2193,11 +2188,11 @@ export default function Builder() {
                   </label>
                   <div className="flex items-center gap-2 p-4 bg-editorial-bg border border-editorial-border rounded-2xl">
                     <span className="text-xs font-mono text-editorial-ink truncate flex-1">
-                      {window.location.origin}/invite/{siteSlug}
+                      {window.location.origin}/story/{siteSlug}
                     </span>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/invite/${siteSlug}`);
+                        navigator.clipboard.writeText(`${window.location.origin}/story/${siteSlug}`);
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
                       }}
@@ -2214,15 +2209,15 @@ export default function Builder() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => window.open(`/invite/${siteSlug}`, "_blank")}
+                    onClick={() => window.open(`/story/${siteSlug}`, "_blank")}
                     className="flex items-center justify-center gap-2 py-3 border border-editorial-border rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-editorial-bg transition-all"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
-                    Visit Live
+                    Visit Live Story
                   </button>
                   <button
                     onClick={() => {
-                      const text = `Join us for our ${isHousewarming ? "Housewarming" : "Wedding"}! ${window.location.origin}/invite/${siteSlug}`;
+                      const text = `Join us for our ${isHousewarming ? "Housewarming" : "Wedding"}! ❤️ View our cinematic story here: ${window.location.origin}/story/${siteSlug}`;
                       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
                     }}
                     className="flex items-center justify-center gap-2 py-3 bg-[#25D366] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-md"

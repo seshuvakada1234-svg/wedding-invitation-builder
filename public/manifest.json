@@ -1,0 +1,21 @@
+{
+  "name": "Wedding Invitation",
+  "short_name": "Wedding Invite",
+  "description": "Luxury AI Wedding Invitation Builder",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#C8A96B",
+  "icons": [
+    {
+      "src": "https://www.weddinginvitation.tech/logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://www.weddinginvitation.tech/logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
