@@ -114,6 +114,105 @@ function calculateFreeViews(price: number) {
   return 500;
 }
 
+/**
+ * Normalizes image fields in the invitation data to ensure they use public CDN URLs.
+ * Detects blob URLs or broken internal storage paths and replaces them with public ones if possible.
+ */
+function normalizeInvitationImages(data: any): any {
+  if (!data) return data;
+  
+  const publicUrl = (process.env.R2_PUBLIC_URL || "").trim().replace(/^["'](.+)["']$/, "$1").replace(/\/$/, "");
+  
+  const fixUrl = (val: any): any => {
+    if (val === undefined || val === null) return val;
+    
+    // If it's an EditableImage object
+    if (typeof val === "object" && val.url) {
+      return { ...val, url: fixUrl(val.url) };
+    }
+    
+    // If it's a string URL
+    if (typeof val === "string") {
+      // 1. Detect blob URLs - these are broken for public users
+      if (val.startsWith("blob:")) return null; 
+      
+      // 2. Detect local/development paths
+      if (val.startsWith("http://localhost") || val.startsWith("http://127.0.0.1")) return null;
+      
+      // 3. Fix internal R2 endpoint URLs to use public CDN if available
+      const r2Endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["'](.+)["']$/, "$1");
+      const bucket = (process.env.R2_BUCKET || "").trim().replace(/^["'](.+)["']$/, "$1");
+      
+      if (publicUrl && (val.includes(r2Endpoint) || val.includes(".r2.cloudflarestorage.com"))) {
+        // Extract the key part (usually users/userId/inviteId/timestamp-name.ext)
+        const urlParts = val.split("/");
+        const usersIndex = urlParts.indexOf("users");
+        if (usersIndex !== -1) {
+          const key = urlParts.slice(usersIndex).join("/");
+          return `${publicUrl}/${key}`;
+        }
+      }
+    }
+    return val;
+  };
+
+  const newData = { ...data };
+  
+  if (newData.coverImage) newData.coverImage = fixUrl(newData.coverImage);
+  if (newData.image) newData.image = fixUrl(newData.image);
+  
+  if (Array.isArray(newData.galleryImages)) {
+    newData.galleryImages = newData.galleryImages.map(fixUrl);
+  }
+  
+  if (Array.isArray(newData.events)) {
+    newData.events = newData.events.map((ev: any) => ({
+      ...ev,
+      image: fixUrl(ev.image)
+    }));
+  }
+  
+  if (newData.publishedData) {
+    newData.publishedData = normalizeInvitationImages(newData.publishedData);
+  }
+  
+  if (newData.draftData) {
+    newData.draftData = normalizeInvitationImages(newData.draftData);
+  }
+
+  return newData;
+}
+
+/**
+ * Recursively removes undefined values from an object or array to prevent Firestore crashes.
+ */
+function sanitizeFirestoreData(data: any): any {
+  if (data === undefined) return null;
+  if (data === null || typeof data !== 'object') return data;
+  
+  if (Array.isArray(data)) {
+    return data.map(item => sanitizeFirestoreData(item));
+  }
+  
+  const sanitized: Record<string, any> = {};
+  for (const key in data) {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      const value = data[key];
+      if (key === 'image' && (value === undefined || value === null)) {
+        sanitized[key] = "";
+        continue;
+      }
+      
+      if (value !== undefined) {
+        sanitized[key] = sanitizeFirestoreData(value);
+      } else {
+        sanitized[key] = null;
+      }
+    }
+  }
+  return sanitized;
+}
+
 // ─── Server ──────────────────────────────────────────────────────────────────
 
 async function startServer() {
@@ -379,8 +478,11 @@ async function startServer() {
         });
       }
 
+      const normalizedSaveData = normalizeInvitationImages(data);
+      const sanitizedData = sanitizeFirestoreData(normalizedSaveData);
+
       const inviteData: any = {
-        ...data,
+        ...sanitizedData,
         template,
         userId: tokenUserId,
         isPaid: true,
@@ -432,8 +534,10 @@ async function startServer() {
         return res.status(503).json({ success: false, error: "Database configuration error." });
       }
 
+      const sanitizedData = sanitizeFirestoreData(data);
+
       const inviteData: any = {
-        ...data,
+        ...sanitizedData,
         userId: tokenUserId,
         slug: id,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),

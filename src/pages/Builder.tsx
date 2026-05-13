@@ -1046,16 +1046,19 @@ export default function Builder() {
       });
       
       if (forceSaveAfterPayment) {
+        // We published successfully after payment
         setShowFinalSuccessModal(true);
-      } else {
         toast.success("🎉 Your Story is Live!");
+      } else {
+        toast.success("🎉 Changes published successfully!");
         setTimeout(() => {
-          window.location.href = `/invite/${id}`;
+          navigate(`/invitation/${id}`);
         }, 1500);
       }
     } catch (error: any) {
       if (error.message !== "paymentRequired") {
         console.error("Publish error:", error);
+        // Added more detailed toast for debugging if needed, but keeping it clean
         toast.error(error.message || "An error occurred during publish.");
       } else {
         setShowPricingModal(true);
@@ -1255,6 +1258,17 @@ export default function Builder() {
       setIsProcessingPayment(false);
     }
   };
+
+  useEffect(() => {
+    if (showFinalSuccessModal && publishedInviteId) {
+      const timer = setTimeout(() => {
+        if (showFinalSuccessModal) {
+          navigate(`/invitation/${publishedInviteId}`);
+        }
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [showFinalSuccessModal, publishedInviteId, navigate]);
 
   // ─── Viewport helpers ────────────────────────────────────────────────────────
 
@@ -2139,11 +2153,11 @@ export default function Builder() {
                   <label className="text-[10px] font-bold uppercase tracking-widest text-editorial-muted mb-3 block">Live Link</label>
                   <div className="flex items-center gap-2 p-5 bg-editorial-bg border border-editorial-border rounded-2xl">
                     <span className="text-xs font-mono text-editorial-ink truncate flex-1 font-medium">
-                      {window.location.origin}/story/{publishedInviteId}
+                      {window.location.origin}/invitation/{publishedInviteId || siteSlug}
                     </span>
                     <button 
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/story/${publishedInviteId}`);
+                        navigator.clipboard.writeText(`${window.location.origin}/invitation/${publishedInviteId || siteSlug}`);
                         toast.success("Link copied!");
                       }}
                       className="p-2 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-editorial-border"
@@ -2155,15 +2169,15 @@ export default function Builder() {
   
                 <div className="grid grid-cols-1 gap-3">
                   <button 
-                    onClick={() => window.open(`/story/${publishedInviteId}`, '_blank')}
+                    onClick={() => window.open(`/invitation/${publishedInviteId || siteSlug}`, '_blank')}
                     className="flex items-center justify-center gap-3 py-4 bg-editorial-ink text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    Visit Live Story
+                    Visit Live story
                   </button>
                   <button 
                     onClick={() => {
-                      const text = `Join us for our special day! ❤️ View our cinematic story here: ${window.location.origin}/story/${publishedInviteId}`;
+                      const text = `Join us for our special day! ❤️ View our cinematic story here: ${window.location.origin}/invitation/${publishedInviteId || siteSlug}`;
                       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
                     }}
                     className="flex items-center justify-center gap-3 py-4 bg-[#25D366] text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg"
@@ -2221,11 +2235,11 @@ export default function Builder() {
                   </label>
                   <div className="flex items-center gap-2 p-4 bg-editorial-bg border border-editorial-border rounded-2xl">
                     <span className="text-xs font-mono text-editorial-ink truncate flex-1">
-                      {window.location.origin}/story/{siteSlug}
+                      {window.location.origin}/invitation/{publishedInviteId || siteSlug}
                     </span>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/story/${siteSlug}`);
+                        navigator.clipboard.writeText(`${window.location.origin}/invitation/${publishedInviteId || siteSlug}`);
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
                       }}
@@ -2242,7 +2256,7 @@ export default function Builder() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <button
-                    onClick={() => window.open(`/story/${siteSlug}`, "_blank")}
+                    onClick={() => window.open(`/invitation/${publishedInviteId || siteSlug}`, "_blank")}
                     className="flex items-center justify-center gap-2 py-3 border border-editorial-border rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-editorial-bg transition-all"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -2250,7 +2264,7 @@ export default function Builder() {
                   </button>
                   <button
                     onClick={() => {
-                      const text = `Join us for our ${isHousewarming ? "Housewarming" : "Wedding"}! ❤️ View our cinematic story here: ${window.location.origin}/story/${siteSlug}`;
+                      const text = `Join us for our ${isHousewarming ? "Housewarming" : "Wedding"}! ❤️ View our cinematic story here: ${window.location.origin}/invitation/${publishedInviteId || siteSlug}`;
                       window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
                     }}
                     className="flex items-center justify-center gap-2 py-3 bg-[#25D366] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-md"

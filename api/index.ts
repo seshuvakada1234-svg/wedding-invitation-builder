@@ -353,6 +353,91 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.json({ success: true, order, amount, templateId });
     }
 
+    // ── POST /api/create-redeploy-order ──
+    if (path === "/api/create-redeploy-order" && method === "POST") {
+      const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+      const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+      if (!keyId || !keySecret) return res.status(500).json({ success: false, error: "Razorpay not configured" });
+      
+      const amount = 9900; // ₹99
+      const rp = new Razorpay({ key_id: keyId, key_secret: keySecret });
+      const order = await rp.orders.create({
+        amount,
+        currency: "INR",
+        receipt: `redeploy_${Date.now()}`,
+      });
+      return res.json({ success: true, order, amount });
+    }
+
+    // ── POST /api/create-topup-order ──
+    if (path === "/api/create-topup-order" && method === "POST") {
+      const { inviteId } = req.body;
+      if (!inviteId) return res.status(400).json({ success: false, error: "Invite ID required" });
+      
+      const keyId = process.env.RAZORPAY_KEY_ID?.trim();
+      const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
+      if (!keyId || !keySecret) return res.status(500).json({ success: false, error: "Razorpay not configured" });
+      
+      const amount = 9900; // ₹99
+      const rp = new Razorpay({ key_id: keyId, key_secret: keySecret });
+      const order = await rp.orders.create({
+        amount,
+        currency: "INR",
+        receipt: `topup_${inviteId}_${Date.now()}`,
+      });
+      return res.json({ success: true, order, amount });
+    }
+
+    // ── POST /api/verify-topup-payment ──
+    if (path === "/api/verify-topup-payment" && method === "POST") {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, inviteId } = req.body;
+      if (!inviteId) return res.status(400).json({ success: false, error: "Invite ID required" });
+      
+      const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim();
+      if (!key_secret) throw new Error("Razorpay secret missing");
+      const hmac = crypto.createHmac("sha256", key_secret);
+      hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+      if (hmac.digest("hex") !== razorpay_signature) return res.status(400).json({ success: false, error: "Invalid signature" });
+      
+      // Increment view limit
+      const inviteRef = adminDb.collection("invites").doc(inviteId);
+      const inviteDoc = await inviteRef.get();
+      if (!inviteDoc.exists) return res.status(404).json({ success: false, error: "Invite not found" });
+      
+      await inviteRef.update({
+        viewLimit: admin.firestore.FieldValue.increment(1000),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      return res.json({ success: true });
+    }
+
+    // ── POST /api/verify-redeploy-payment ──
+    if (path === "/api/verify-redeploy-payment" && method === "POST") {
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature, inviteId } = req.body;
+      if (!inviteId) return res.status(400).json({ success: false, error: "Invite ID required" });
+      const userId = await verifyUser(req as any);
+      
+      const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim();
+      if (!key_secret) throw new Error("Razorpay secret missing");
+      const hmac = crypto.createHmac("sha256", key_secret);
+      hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+      if (hmac.digest("hex") !== razorpay_signature) return res.status(400).json({ success: false, error: "Invalid signature" });
+      
+      const inviteRef = adminDb.collection("invites").doc(inviteId);
+      const inviteSnap = await inviteRef.get();
+      if (!inviteSnap.exists) return res.status(404).json({ success: false, error: "Invite not found" });
+      
+      await inviteRef.update({
+        hasUnpublishedChanges: false,
+        lastPublishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        redeployCount: admin.firestore.FieldValue.increment(1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      return res.json({ success: true });
+    }
+
     // ── POST /api/verify-payment ──
     if (path === "/api/verify-payment" && method === "POST") {
       const { razorpay_order_id, razorpay_payment_id, razorpay_signature, userId, email, templateId } = req.body;
@@ -377,32 +462,88 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         { merge: true }
       );
 
-      // Use update to properly handle nested path for paidTemplates
       const updateData: any = {
         paymentId: razorpay_payment_id,
         orderId: razorpay_order_id,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
       
-      // Set nested path for paidTemplates
+      let paymentAmount = 499; // Default factor
+      
+      // ✅ Fetch dynamic price for analytics
+      try {
+         const templateDoc = await adminDb.collection("templates").doc(templateId).get();
+         if (templateDoc.exists) {
+            const tData = templateDoc.data();
+            if (tData?.publishPrice) {
+              paymentAmount = Number(tData.publishPrice);
+            }
+         }
+      } catch (ePrice) {
+         console.warn("Failed to fetch price for analytics verification:", ePrice);
+      }
+
       if (templateId) {
-        const normId = templateId.toString().toLowerCase().trim();
-        updateData[`paidTemplates.${normId}`] = true;
-        if (normId !== templateId) {
-          updateData[`paidTemplates.${templateId}`] = true;
-        }
-        
-        // If they pay for a high-tier template, maybe grant legacy paid:true as well?
-        // Or if it's the 'minimal' or 'premium_pass'
-        if (normId === "minimal" || normId === "all_access" || normId === "premium") {
-          updateData.paid = true;
+        if (templateId === "REDEPLOY") {
+          // Redeploy payment is ₹99
+          paymentAmount = 99;
+        } else {
+          const normId = templateId.toString().toLowerCase().trim();
+          updateData[`paidTemplates.${normId}`] = true;
+          if (normId !== templateId) {
+            updateData[`paidTemplates.${templateId}`] = true;
+          }
+          
+          if (normId === "minimal" || normId === "all_access" || normId === "premium") {
+            updateData.paid = true;
+          }
         }
       } else {
-        // If no specifically provided templateId, treat as global paid:true
         updateData.paid = true;
       }
       
       await userRef.update(updateData);
+
+      // ✅ Update any active invites with this template to have the new freeViews limit
+      try {
+        const freeViews = (price: number) => {
+          if (price >= 9999) return 10000;
+          if (price >= 4999) return 5000;
+          if (price >= 1999) return 2000;
+          if (price >= 1499) return 1500;
+          if (price >= 999) return 1000;
+          return 500;
+        };
+        
+        const fv = freeViews(paymentAmount);
+        const invitesSnapshot = await adminDb.collection("invites")
+          .where("userId", "==", confirmedUserId)
+          .where("template", "==", templateId)
+          .get();
+        
+        const batch = adminDb.batch();
+        invitesSnapshot.docs.forEach(doc => {
+          batch.update(doc.ref, { 
+            templatePrice: paymentAmount,
+            freeViews: fv,
+          });
+        });
+        await batch.commit();
+      } catch (eInvites) {
+         console.error("Error updating invite freeViews in verify-payment:", eInvites);
+      }
+
+      // ✅ Create detailed payment record for analytics
+      await adminDb.collection("payments").add({
+        userId: confirmedUserId,
+        email: email || null,
+        templateId: templateId || "minimal",
+        amount: paymentAmount,
+        status: "paid",
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
 
       return res.json({ success: true });
     }

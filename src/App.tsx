@@ -61,6 +61,8 @@ export default function App() {
               </ProtectedRoute>
             } />
 
+            <Route path="publish/:id" element={<Navigate to="/" replace />} />
+
             <Route path="admin" element={
               <ProtectedRoute requireAdmin={true}>
                 <Admin />
@@ -71,6 +73,8 @@ export default function App() {
           <Route path="/preview/:templateId" element={<Preview />} />
           <Route path="/story/:id" element={<Site />} />
           <Route path="/invite/:id" element={<Site />} />
+          <Route path="/invitation/:id" element={<Site />} />
+          <Route path="/link/:id" element={<Site />} />
           <Route path="/site/:id" element={<Site />} />
           <Route path="/wedding/:id" element={<Site />} />
 
