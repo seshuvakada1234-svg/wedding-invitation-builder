@@ -25,7 +25,6 @@ export const db = initializeFirestore(app, {
 
 /**
  * Recursively removes undefined values from an object or array to prevent Firestore crashes.
- * Also ensures empty images are represented as empty strings.
  */
 export function sanitizeFirestoreData(data: any): any {
   if (data === undefined) return null;
@@ -39,12 +38,10 @@ export function sanitizeFirestoreData(data: any): any {
   for (const key in data) {
     if (Object.prototype.hasOwnProperty.call(data, key)) {
       const value = data[key];
-      // If it's a field we know should be a string (like image) but it's empty/underfined
       if (key === 'image' && (value === undefined || value === null)) {
         sanitized[key] = "";
         continue;
       }
-      
       if (value !== undefined) {
         sanitized[key] = sanitizeFirestoreData(value);
       } else {
@@ -64,22 +61,15 @@ export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
 export const loginAnonymously = () => signInAnonymously(auth);
 export const logout = () => signOut(auth);
 
-// ✅ call this before every fetch to /api/* that needs auth
 export async function getAuthToken(): Promise<string | null> {
   const user = auth.currentUser;
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
   try {
-    // We remove the explicit 'true' (force refresh) to avoid unnecessary network calls
-    // especially if the user is in a restricted or unstable network environment.
-    // Firebase SDK will still refresh the token automatically if it has expired.
     const token = await user.getIdToken();
     return token;
   } catch (error: any) {
     if (error.code === "auth/network-request-failed") {
-      console.error("Network error while getting auth token. The client might be offline or blocked.");
-      // We return null and let the caller handle it (usually by showing an error or re-trying)
+      console.error("Network error while getting auth token.");
     } else {
       console.error("getAuthToken failed:", error.message);
     }
@@ -87,19 +77,48 @@ export async function getAuthToken(): Promise<string | null> {
   }
 }
 
-// ✅ convenience wrapper: fetch with Authorization header pre-attached
+/**
+ * Returns true for any FormData-like body, including across module/iframe
+ * boundaries where instanceof may fail.
+ */
+function isFormDataBody(body: RequestInit["body"]): boolean {
+  if (!body) return false;
+  // Standard instanceof check
+  if (body instanceof FormData) return true;
+  // Constructor-name fallback (works when FormData comes from a different
+  // module context — common in Vite dev / Vercel edge runtimes)
+  if (typeof body === "object" && (body as any).constructor?.name === "FormData") return true;
+  return false;
+}
+
+/**
+ * Fetch wrapper that attaches the Firebase auth token automatically.
+ *
+ * IMPORTANT: Never set Content-Type manually when uploading files.
+ * This function detects FormData bodies and deliberately omits the
+ * Content-Type header so the browser can set the multipart boundary itself.
+ */
 export async function authFetch(
   url: string,
   options: RequestInit = {}
 ): Promise<Response> {
   const token = await getAuthToken();
 
+  // Start from any caller-supplied headers (but never trust Content-Type
+  // that the caller set on a FormData body — strip it to be safe).
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
 
-  // Only set default Content-Type if not provided and not FormData
-  if (!headers["Content-Type"] && !(options.body instanceof FormData)) {
+  const formData = isFormDataBody(options.body);
+
+  if (formData) {
+    // Remove any manually-set Content-Type — the browser MUST set this
+    // itself so it can include the multipart boundary string.
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+  } else if (!headers["Content-Type"]) {
+    // Non-file requests default to JSON
     headers["Content-Type"] = "application/json";
   }
 
