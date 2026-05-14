@@ -68,7 +68,7 @@ const GALLERY_DEFAULTS: Record<string, string[]> = {
     "https://images.unsplash.com/photo-1623053531393-e4d0937a0980?auto=format&fit=crop&q=80&w=800",
   ],
   default: [
-    "https://images.unsplash.com/photo-1519225497282-14337446bc77?auto=format&fit=crop&q=80&w=800",
+    "https://images.unsplash.com/photo-1510076857177-7470076d4098?auto=format&fit=crop&q=80&w=800",
     "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800",
     "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800",
   ],
