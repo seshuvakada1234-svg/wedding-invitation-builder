@@ -54,19 +54,34 @@ export interface WeddingInvite {
   userId: string;
   userName?: string;
   email?: string;
-  
-  // Separation of states
+
+  // ── Separated state architecture ──────────────────────────────────────────
+  // draftData  → what the editor loads and saves on every change
+  // publishedData → frozen snapshot; only updated on paid publish/redeploy
   draftData: TemplateDraft;
   publishedData?: TemplateDraft;
-  
-  // Root fields for compatibility and quick access
+
+  // ── Root fields (lifecycle flags — NEVER overwritten by draftData spread) ─
+  // These must always reflect the true Firestore document state.
+  published: boolean;
+  isPaid: boolean;
+  paid?: boolean;                  // mirrors check-user API response field
+  hasUnpublishedChanges?: boolean;
+  lastPublishedAt?: string;
+  redeployCount?: number;
+
+  // ── Root display fields (kept in sync with draftData on every save) ───────
+  // Used for quick access in Dashboard cards and API queries.
   brideName: string;
   groomName: string;
   weddingDate: string;
   location: string;
   template: TemplateType;
 
-  // Additional fields used in Builder state
+  // ── Editor working fields (mirrored from draftData into formData) ─────────
+  // These exist on the root so Builder's formData state works without
+  // constantly unwrapping draftData. On load, hydrated from draftData only
+  // (never allowed to clobber lifecycle flags above).
   coverImage?: string | EditableImage;
   coverImageKey?: string;
   galleryImages: (string | EditableImage)[];
@@ -85,17 +100,17 @@ export interface WeddingInvite {
   story?: string;
   events: WeddingEvent[];
 
+  // ── Per-template drafts (for template-switcher memory) ───────────────────
   templateDrafts?: Record<string, TemplateDraft>;
-  isPaid: boolean;
-  published: boolean;
+
+  // ── View / billing ────────────────────────────────────────────────────────
   views: number;
   viewLimit: number;
   freeViews?: number;
   templatePrice?: number;
   limitExceeded?: boolean;
-  hasUnpublishedChanges?: boolean;
-  lastPublishedAt?: string;
-  redeployCount?: number;
+
+  // ── Timestamps ────────────────────────────────────────────────────────────
   createdAt: string;
   updatedAt: string;
 }

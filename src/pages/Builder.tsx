@@ -112,14 +112,13 @@ export default function Builder() {
     viewLimit: 500,
     views: 0,
     isPaid: false,
+    published: false,
   });
 
   const currentTemplateId = (formData.template || initialTemplate) as TemplateType;
   const templateConfig = getTemplateById(currentTemplateId);
 
   // ── Auth state ──────────────────────────────────────────────────────────────
-  // FIX: track the actual Firebase user object so we never call API before
-  // auth is restored from session storage.
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [templatePrices, setTemplatePrices] = useState<Record<string, number>>({
@@ -137,7 +136,7 @@ export default function Builder() {
         const templateIds = staticTemplates.map(t => t.id);
         const promises = templateIds.map(t => getDoc(doc(db, "templates", t)));
         const snaps = await Promise.all(promises);
-        
+
         const newPrices: Record<string, number> = { ...templatePrices };
         snaps.forEach((snap, i) => {
           if (snap.exists()) {
@@ -153,15 +152,12 @@ export default function Builder() {
       }
     }
 
-    // onAuthStateChanged fires once immediately with the persisted user (or null).
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setAuthLoading(false);
-      // Load prices once auth state is settled
       loadDynamicPrices();
     });
 
-    // Safety timeout — if Firebase takes > 6 s, stop blocking the UI.
     const timeout = setTimeout(() => {
       if (authLoading) {
         console.warn("Auth timed out — forcing unblocked view.");
@@ -192,14 +188,14 @@ export default function Builder() {
   const [copied, setCopied] = useState(false);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [viewDevice, setViewDevice] = useState<"desktop" | "tablet" | "mobile">("desktop");
-  
+
   const prevTemplateRef = useRef<string | undefined>(formData.template);
 
   // ── Track changes ──────────────────────────────────────────────────────────
   const loadedDataRef = useRef<string>("");
   useEffect(() => {
     if (!formData.published) return;
-    
+
     const currentDataStr = JSON.stringify({
       brideName: formData.brideName,
       groomName: formData.groomName,
@@ -218,11 +214,10 @@ export default function Builder() {
       family: formData.family,
       eventName: formData.eventName,
       enable3D: formData.enable3D,
-      enableEnvelope: formData.enableEnvelope
+      enableEnvelope: formData.enableEnvelope,
     });
 
     if (!loadedDataRef.current && isEditMode) {
-      // Avoid setting ref on initial empty state if we are loading
       return;
     }
 
@@ -246,9 +241,9 @@ export default function Builder() {
   // ─── Derived values ─────────────────────────────────────────────────────────
   const isHousewarming = formData.template === "housewarming-south";
 
-  const siteSlug = 
-    formData.slug || 
-    inviteId || 
+  const siteSlug =
+    formData.slug ||
+    inviteId ||
     (`${formData.groomName?.toLowerCase() || "groom"}-${formData.brideName?.toLowerCase() || "bride"}`)
       .replace(/\s+/g, "-")
       .replace(/[^a-z0-9-]/g, "") || "new-invite";
@@ -285,7 +280,7 @@ export default function Builder() {
 
     const currentDataStr = JSON.stringify({
       formData: formData,
-      activeDraft: getCurrentDataAsDraft()
+      activeDraft: getCurrentDataAsDraft(),
     });
 
     if (lastAutoSaveRef.current === "") {
@@ -299,13 +294,13 @@ export default function Builder() {
       try {
         const token = await currentUser.getIdToken();
         const id = inviteId || formData.slug || siteSlug;
-        
+
         const currentDraft = getCurrentDataAsDraft();
         const inviteData: Partial<WeddingInvite> = {
           draftData: currentDraft,
           templateDrafts: {
             ...(formData.templateDrafts || {}),
-            [formData.template || "royal-wedding"]: currentDraft
+            [formData.template || "royal-wedding"]: currentDraft,
           },
           updatedAt: new Date().toISOString() as any,
           hasUnpublishedChanges: true,
@@ -319,13 +314,13 @@ export default function Builder() {
           },
           body: JSON.stringify({ id, ...inviteData }),
         });
-        
+
         lastAutoSaveRef.current = currentDataStr;
         console.log("Auto-save successful");
       } catch (err) {
         console.error("Auto-save failed:", err);
       }
-    }, 5000); // 5 second debounce
+    }, 5000);
 
     return () => clearTimeout(timer);
   }, [formData, currentUser, authLoading, isFetchingInvite, isEditMode, inviteId, siteSlug]);
@@ -335,7 +330,6 @@ export default function Builder() {
     async function loadInvite() {
       if (!inviteId || !currentUser) {
         if (inviteId && !currentUser) {
-          // If we have inviteId but no user, wait for auth or redirect
           return;
         }
         setIsFetchingInvite(false);
@@ -355,42 +349,73 @@ export default function Builder() {
             return;
           }
 
-          // Hydrate from draftData if available
-          if (data.draftData) {
-            setFormData({
-              ...data,
-              ...data.draftData
-            });
-          } else {
-            setFormData(data);
-          }
+          // ── CORE FIX: Hydrate editor fields from draftData but preserve
+          // all lifecycle flags from the root document.
+          // The old code did { ...data, ...data.draftData } which let draftData
+          // (a TemplateDraft — no published/isPaid fields) clobber those flags
+          // to undefined, breaking the publish button and payment check.
+          const source = data.draftData || data;
+
+          setFormData({
+            // 1. Root document first — captures all lifecycle flags:
+            //    published, isPaid, paid, hasUnpublishedChanges, id, slug,
+            //    userId, views, viewLimit, createdAt, updatedAt, etc.
+            ...data,
+
+            // 2. Overlay ONLY editor/display fields from draftData.
+            //    These are the fields TemplateDraft contains.
+            //    We never spread the entire draftData object to avoid
+            //    overwriting lifecycle flags with undefined.
+            brideName: source.brideName,
+            groomName: source.groomName,
+            weddingDate: source.weddingDate,
+            location: source.location,
+            template: (source.template || data.template) as TemplateType,
+            coverImage: source.coverImage,
+            coverImageKey: source.coverImageKey,
+            galleryImages: source.galleryImages || [],
+            galleryImageKeys: source.galleryImageKeys || [],
+            events: source.events || [],
+            story: source.story,
+            muhurtham: source.muhurtham,
+            deity: source.deity,
+            family: source.family,
+            eventName: source.eventName,
+            enable3D: source.enable3D,
+            enableEnvelope: source.enableEnvelope,
+            googleMapsLink: source.googleMapsLink || "",
+            googleMapsEmbedUrl: source.googleMapsEmbedUrl,
+            venueAddress: source.venueAddress,
+            venueCity: source.venueCity,
+            coordinates: source.coordinates,
+          });
 
           // Sync prevTemplateRef to avoid triggering the template switch effect on initial load
-          prevTemplateRef.current = data.draftData?.template || data.template;
+          prevTemplateRef.current = source.template || data.template;
           setIsEditMode(true);
           setHasUnpublishedChanges(data.hasUnpublishedChanges || false);
-          
-          // Set initial reference data AFTER loading
-          const d = data.draftData || data;
+
+          // Set initial reference data AFTER loading so change-detection
+          // doesn't fire immediately on open
           loadedDataRef.current = JSON.stringify({
-            brideName: d.brideName,
-            groomName: d.groomName,
-            weddingDate: d.weddingDate,
-            location: d.location,
-            venueAddress: d.venueAddress,
-            venueCity: d.venueCity,
-            googleMapsLink: d.googleMapsLink,
-            coordinates: d.coordinates,
-            story: d.story,
-            events: d.events,
-            galleryImages: d.galleryImages,
-            template: d.template,
-            muhurtham: d.muhurtham,
-            deity: d.deity,
-            family: d.family,
-            eventName: d.eventName,
-            enable3D: d.enable3D,
-            enableEnvelope: d.enableEnvelope
+            brideName: source.brideName,
+            groomName: source.groomName,
+            weddingDate: source.weddingDate,
+            location: source.location,
+            venueAddress: source.venueAddress,
+            venueCity: source.venueCity,
+            googleMapsLink: source.googleMapsLink,
+            coordinates: source.coordinates,
+            story: source.story,
+            events: source.events,
+            galleryImages: source.galleryImages,
+            template: source.template,
+            muhurtham: source.muhurtham,
+            deity: source.deity,
+            family: source.family,
+            eventName: source.eventName,
+            enable3D: source.enable3D,
+            enableEnvelope: source.enableEnvelope,
           });
         } else {
           toast.error("Invitation not found.");
@@ -416,16 +441,13 @@ export default function Builder() {
     const oldTemplate = prevTemplateRef.current;
     const newTemplate = formData.template;
 
-    // Only proceed if template actually changed
     if (oldTemplate && newTemplate && oldTemplate !== newTemplate) {
       setFormData((prev) => {
         if (!prev) return prev;
 
-        // 1. Capture current data into a draft for the old template
-        // [IMPORTANT] We MUST ensure the draft we are saving is associated with the TEMPLATE ID that was JUST active
         const currentDataAsDraft = {
           ...getCurrentDataAsDraft(prev),
-          template: oldTemplate as TemplateType
+          template: oldTemplate as TemplateType,
         };
 
         const updatedDrafts = {
@@ -433,24 +455,18 @@ export default function Builder() {
           [oldTemplate]: currentDataAsDraft,
         };
 
-        // 2. Check if we have a draft for the new template
         const existingDraft = updatedDrafts[newTemplate];
 
         if (existingDraft) {
-          // Restore from draft - EXPLICITLY set all fields from the draft
-          // to overwrite any "contaminated" root fields from the old template
           return {
             ...prev,
             ...existingDraft,
             templateDrafts: updatedDrafts,
-            // Ensure the main template field is also correct
-            template: newTemplate as TemplateType
+            template: newTemplate as TemplateType,
           };
         } else {
-          // No draft exists? Use defaults for new template, but keep names/date/location
           const defaultEventNames = TEMPLATE_DEFAULTS[newTemplate] || ["Wedding"];
-          
-          // Create a "clean" new template state
+
           const newTemplateState: TemplateDraft = {
             template: newTemplate as TemplateType,
             brideName: prev.brideName || "",
@@ -464,7 +480,6 @@ export default function Builder() {
               time: "TBD",
               location: prev.location || "TBD",
             })),
-            // Reset other design fields to defaults for the new template
             coverImage: undefined,
             coverImageKey: undefined,
             galleryImageKeys: [],
@@ -486,7 +501,7 @@ export default function Builder() {
             ...prev,
             ...newTemplateState,
             templateDrafts: updatedDrafts,
-            template: newTemplate as TemplateType
+            template: newTemplate as TemplateType,
           };
         }
       });
@@ -542,7 +557,6 @@ export default function Builder() {
   const handleImageEditorSave = async (data: EditableImage) => {
     if (imageEditorConfig.target === "cover") {
       setFormData((prev) => {
-        // Revoke old blob URL if existing
         if (typeof prev.coverImage === "object" && prev.coverImage.url.startsWith("blob:")) {
           URL.revokeObjectURL(prev.coverImage.url);
         }
@@ -572,7 +586,7 @@ export default function Builder() {
           }
           newEvents[idx] = {
             ...newEvents[idx],
-            image: data
+            image: data,
           };
         }
         return { ...prev, events: newEvents };
@@ -586,7 +600,6 @@ export default function Builder() {
     const uploadMap = new Map<string, { url: string; key: string }>();
     const collectTasks: (() => Promise<void>)[] = [];
 
-    // Helper to add upload task
     const addTask = (file: File, previewUrl: string) => {
       collectTasks.push(async () => {
         const res = await uploadImage(file);
@@ -594,31 +607,28 @@ export default function Builder() {
       });
     };
 
-    if (typeof updatedData.coverImage === 'object' && updatedData.coverImage?.file) {
+    if (typeof updatedData.coverImage === "object" && updatedData.coverImage?.file) {
       addTask(updatedData.coverImage.file, updatedData.coverImage.url);
     }
-    
-    // Support coupleImage found in some older templates or user requests
-    if (typeof (updatedData as any).coupleImage === 'object' && (updatedData as any).coupleImage?.file) {
+
+    if (typeof (updatedData as any).coupleImage === "object" && (updatedData as any).coupleImage?.file) {
       addTask((updatedData as any).coupleImage.file, (updatedData as any).coupleImage.url);
     }
-    
-    // Generic image field support
-    if (typeof (updatedData as any).image === 'object' && (updatedData as any).image?.file) {
+
+    if (typeof (updatedData as any).image === "object" && (updatedData as any).image?.file) {
       addTask((updatedData as any).image.file, (updatedData as any).image.url);
     }
 
     updatedData.galleryImages?.forEach((img) => {
-      if (typeof img === 'object' && img.file) {
+      if (typeof img === "object" && img.file) {
         addTask(img.file, img.url);
       }
     });
 
     updatedData.events?.forEach((ev) => {
-      if (typeof ev.image === 'object' && ev.image.file) {
+      if (typeof ev.image === "object" && ev.image.file) {
         addTask(ev.image.file, ev.image.url);
-      } else if (typeof (ev as any).img === 'object' && (ev as any).img.file) {
-        // Some templates use .img instead of .image
+      } else if (typeof (ev as any).img === "object" && (ev as any).img.file) {
         addTask((ev as any).img.file, (ev as any).img.url);
       }
     });
@@ -627,28 +637,26 @@ export default function Builder() {
 
     const toastId = toast.loading("Uploading images to secure storage...");
     try {
-      // Execute in sequence or small batches to avoid overwhelming the server
       for (const task of collectTasks) {
         await task();
       }
-      
-      // Map back uploaded URLs
-      if (typeof updatedData.coverImage === 'object' && updatedData.coverImage?.file) {
+
+      if (typeof updatedData.coverImage === "object" && updatedData.coverImage?.file) {
         const result = uploadMap.get(updatedData.coverImage.url);
         if (result) {
           updatedData.coverImage = { ...updatedData.coverImage, url: result.url, file: undefined };
           updatedData.coverImageKey = result.key;
         }
       }
-      
-      if (typeof (updatedData as any).coupleImage === 'object' && (updatedData as any).coupleImage?.file) {
+
+      if (typeof (updatedData as any).coupleImage === "object" && (updatedData as any).coupleImage?.file) {
         const result = uploadMap.get((updatedData as any).coupleImage.url);
         if (result) {
           (updatedData as any).coupleImage = { ...(updatedData as any).coupleImage, url: result.url, file: undefined };
         }
       }
 
-      if (typeof (updatedData as any).image === 'object' && (updatedData as any).image?.file) {
+      if (typeof (updatedData as any).image === "object" && (updatedData as any).image?.file) {
         const result = uploadMap.get((updatedData as any).image.url);
         if (result) {
           (updatedData as any).image = { ...(updatedData as any).image, url: result.url, file: undefined };
@@ -656,8 +664,8 @@ export default function Builder() {
       }
 
       if (updatedData.galleryImages) {
-        updatedData.galleryImages = updatedData.galleryImages.map(img => {
-          if (typeof img === 'object' && img.file) {
+        updatedData.galleryImages = updatedData.galleryImages.map((img) => {
+          if (typeof img === "object" && img.file) {
             const result = uploadMap.get(img.url);
             if (result) return { ...img, url: result.url, file: undefined };
           }
@@ -666,20 +674,20 @@ export default function Builder() {
       }
 
       if (updatedData.events) {
-        updatedData.events = updatedData.events.map(ev => {
+        updatedData.events = updatedData.events.map((ev) => {
           let newEv = { ...ev };
-          if (typeof ev.image === 'object' && ev.image.file) {
+          if (typeof ev.image === "object" && ev.image.file) {
             const result = uploadMap.get(ev.image.url);
             if (result) newEv.image = { ...ev.image, url: result.url, file: undefined };
           }
-          if (typeof (ev as any).img === 'object' && (ev as any).img.file) {
+          if (typeof (ev as any).img === "object" && (ev as any).img.file) {
             const result = uploadMap.get((ev as any).img.url);
             if (result) (newEv as any).img = { ...(ev as any).img, url: result.url, file: undefined };
           }
           return newEv;
         });
       }
-      
+
       toast.success("All images uploaded!", { id: toastId });
     } catch (err) {
       toast.error("Image upload failed. Please try again.", { id: toastId });
@@ -697,10 +705,9 @@ export default function Builder() {
       } else if (target === "event") {
         finalAspect = 16 / 10;
       } else {
-        // Default gallery aspects based on template
         if (formData.template === "royal-wedding") finalAspect = 1;
         else if (formData.template === "kerala-envelope-reveal") finalAspect = 3 / 4;
-        else finalAspect = 4 / 5; // royal-wedding, konaseema, kerala, housewarming
+        else finalAspect = 4 / 5;
       }
     }
 
@@ -714,7 +721,6 @@ export default function Builder() {
   };
 
   const uploadImage = async (file: File) => {
-    // FIX: use currentUser from state, not auth.currentUser directly.
     if (!currentUser) throw new Error("Must be logged in to upload.");
 
     const formDataBody = new FormData();
@@ -735,7 +741,6 @@ export default function Builder() {
         const errorData = JSON.parse(text);
         errorMessage = errorData.error || errorMessage;
       } catch (e) {
-        // If not JSON, use a snippet of the text if it looks like an error message
         if (text.length > 0 && text.length < 200) {
           errorMessage = text;
         } else if (text.includes("<title>")) {
@@ -792,7 +797,7 @@ export default function Builder() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // ─── CORE FIX: handleSave ────────────────────────────────────────────────────
+  // ─── handleSaveDraft ─────────────────────────────────────────────────────────
   const handleSaveDraft = async () => {
     if (!currentUser) {
       toast.error("Please log in first to save a draft.");
@@ -804,8 +809,7 @@ export default function Builder() {
 
     try {
       const token = await currentUser.getIdToken();
-      
-      // Check if user is paid to decide whether to upload images
+
       let isPaid = false;
       try {
         const checkRes = await fetch("/api/check-user", {
@@ -818,32 +822,22 @@ export default function Builder() {
           const userData = await checkRes.json();
           const currentTemplate = (formData.template || "royal-wedding") as string;
           const normalizedTemplate = currentTemplate.toLowerCase().trim();
-          isPaid = userData.paid === true || 
-            (userData.paidTemplates && (
-              userData.paidTemplates[currentTemplate] === true ||
-              userData.paidTemplates[normalizedTemplate] === true
-            ));
+          isPaid =
+            userData.paid === true ||
+            (userData.paidTemplates &&
+              (userData.paidTemplates[currentTemplate] === true ||
+                userData.paidTemplates[normalizedTemplate] === true));
         }
       } catch (e) {
         console.error("Failed to check payment status for draft save, assuming unpaid", e);
       }
 
       let finalizedData = { ...formData };
-      
-      // Update template drafts before saving
+
       finalizedData.templateDrafts = {
         ...(formData.templateDrafts || {}),
-        [formData.template || "royal-wedding"]: getCurrentDataAsDraft()
+        [formData.template || "royal-wedding"]: getCurrentDataAsDraft(),
       };
-      
-      // For drafts, we generally don't perform production R2 uploads 
-      // unless it's already published and we are just sync'ing.
-      // But per requirements, R2 upload ONLY happens after payment.
-      const shouldPerformProductionDeploy = false; 
-
-      if (shouldPerformProductionDeploy) {
-        finalizedData = await uploadPendingImages(formData);
-      }
 
       const id = isEditMode
         ? inviteId || finalizedData.slug || siteSlug
@@ -894,6 +888,7 @@ export default function Builder() {
     }
   };
 
+  // ─── handleSave ──────────────────────────────────────────────────────────────
   const handleSave = async (forceSaveAfterPayment = false) => {
     if (!currentUser) {
       toast.error("Please log in first to publish your invitation.");
@@ -946,34 +941,31 @@ export default function Builder() {
         const currentTemplate = (formData.template || "royal-wedding") as string;
         const normalizedTemplate = currentTemplate.toLowerCase().trim();
 
-        const isTemplatePaid = userData.paid === true || 
-          (userData.paidTemplates && (
-            userData.paidTemplates[currentTemplate] === true ||
-            userData.paidTemplates[normalizedTemplate] === true
-          ));
+        const isTemplatePaid =
+          userData.paid === true ||
+          (userData.paidTemplates &&
+            (userData.paidTemplates[currentTemplate] === true ||
+              userData.paidTemplates[normalizedTemplate] === true));
 
         if (!isTemplatePaid) {
           setShowPricingModal(true);
           return;
         }
 
-        // ✅ REDEPLOY LOGIC: If already published and has changes, force redeploy payment
         if (formData.published && hasUnpublishedChanges && !forceSaveAfterPayment) {
           setShowRedeployModal(true);
           return;
         }
       }
 
-      // ── BATCH UPLOAD PENDING IMAGES ──
-      // This ensures images are ONLY uploaded when the user is about to publish a paid invite
       const dataWithDrafts = {
         ...formData,
         templateDrafts: {
           ...(formData.templateDrafts || {}),
-          [formData.template || "minimal"]: getCurrentDataAsDraft()
-        }
+          [formData.template || "minimal"]: getCurrentDataAsDraft(),
+        },
       };
-      
+
       const finalizedData = await uploadPendingImages(dataWithDrafts);
 
       const currentTemplate = finalizedData.template || "royal-wedding";
@@ -1021,20 +1013,19 @@ export default function Builder() {
         } catch {
           errorMessage = errText || errorMessage;
         }
-        
+
         if (errorMessage === "paymentRequired" || saveRes.status === 402) {
           setShowPricingModal(true);
           return;
         }
-        
+
         throw new Error(errorMessage);
       }
 
       setPublishedInviteId(id);
       setSaveSuccess(true);
       setHasUnpublishedChanges(false);
-      setFormData(prev => ({ ...prev, ...inviteData }));
-      // Update the reference data to prevent immediate re-triggering of change detection
+      setFormData((prev) => ({ ...prev, ...inviteData }));
       loadedDataRef.current = JSON.stringify({
         brideName: inviteData.brideName,
         groomName: inviteData.groomName,
@@ -1053,11 +1044,10 @@ export default function Builder() {
         family: inviteData.family,
         eventName: inviteData.eventName,
         enable3D: inviteData.enable3D,
-        enableEnvelope: inviteData.enableEnvelope
+        enableEnvelope: inviteData.enableEnvelope,
       });
-      
+
       if (forceSaveAfterPayment) {
-        // We published successfully after payment
         setShowFinalSuccessModal(true);
         toast.success("🎉 Your Story is Live!");
       } else {
@@ -1069,7 +1059,6 @@ export default function Builder() {
     } catch (error: any) {
       if (error.message !== "paymentRequired") {
         console.error("Publish error:", error);
-        // Added more detailed toast for debugging if needed, but keeping it clean
         toast.error(error.message || "An error occurred during publish.");
       } else {
         setShowPricingModal(true);
@@ -1093,13 +1082,12 @@ export default function Builder() {
   const handlePaymentAndPublish = async () => {
     if (!currentUser || isProcessingPayment) return;
     setIsProcessingPayment(true);
-  
+
     const currentTemplate = formData.template || "royal-wedding";
     const templatePrice = templatePrices[currentTemplate] || 999;
     const templatePricePaise = templatePrice * 100;
 
     try {
-      // 1. Get Config (Key ID)
       const configRes = await fetch("/api/config");
       const configData = await configRes.json();
       const razorpayKeyId = configData.razorpayKeyId;
@@ -1109,15 +1097,14 @@ export default function Builder() {
       }
 
       const token = await currentUser.getIdToken();
-      
-      // 2. Create Order
+
       const orderRes = await fetch("/api/create-order", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ templateId: currentTemplate })
+        body: JSON.stringify({ templateId: currentTemplate }),
       });
       const orderData = await orderRes.json();
 
@@ -1134,14 +1121,13 @@ export default function Builder() {
         name: "Wedding Invitation",
         description: "Publish Your Invitation",
         order_id: order.id,
-        handler: async function(response: any) {
+        handler: async function (response: any) {
           try {
-      // 3. Verify payment
             const verifyRes = await fetch("/api/verify-payment", {
               method: "POST",
-              headers: { 
-                "Authorization": `Bearer ${token}`, 
-                "Content-Type": "application/json" 
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
               },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
@@ -1150,14 +1136,13 @@ export default function Builder() {
                 userId: currentUser.uid,
                 email: currentUser.email,
                 templateId: currentTemplate,
-              })
+              }),
             });
             const verifyData = await verifyRes.json();
-            
+
             if (verifyData.success) {
               toast.success("Payment verified! Finalizing...");
               setShowPricingModal(false);
-              // Small delay to allow Firestore consistency
               setTimeout(async () => {
                 await handleSave(true);
               }, 1500);
@@ -1176,7 +1161,7 @@ export default function Builder() {
           email: currentUser?.email || "",
           name: currentUser?.displayName || "",
         },
-        theme: { color: "#000000" }
+        theme: { color: "#000000" },
       };
 
       const rzp = new (window as any).Razorpay(options);
@@ -1200,13 +1185,13 @@ export default function Builder() {
       if (!razorpayKeyId) throw new Error("Razorpay key not found");
 
       const token = await currentUser.getIdToken();
-      
+
       const orderRes = await fetch("/api/create-redeploy-order", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
       const orderData = await orderRes.json();
 
@@ -1219,28 +1204,27 @@ export default function Builder() {
         name: "Wedding Invitation",
         description: "Redeploy Your Invitation",
         order_id: orderData.order.id,
-        handler: async function(response: any) {
+        handler: async function (response: any) {
           try {
             const verifyRes = await fetch("/api/verify-redeploy-payment", {
               method: "POST",
-              headers: { 
-                "Authorization": `Bearer ${token}`, 
-                "Content-Type": "application/json" 
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
               },
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
                 inviteId: formData.id || inviteId,
-              })
+              }),
             });
             const verifyData = await verifyRes.json();
-            
+
             if (verifyData.success) {
               toast.success("Payment verified! Redeploying...");
               setShowRedeployModal(false);
               setHasUnpublishedChanges(false);
-              // Save the actual changes now
               setTimeout(async () => {
                 await handleSave(true);
               }, 1500);
@@ -1258,7 +1242,7 @@ export default function Builder() {
           email: currentUser?.email || "",
           name: currentUser?.displayName || "",
         },
-        theme: { color: "#000000" }
+        theme: { color: "#000000" },
       };
 
       const rzp = new (window as any).Razorpay(options);
@@ -1563,7 +1547,9 @@ export default function Builder() {
                     <label className="editorial-label text-[10px]">Active Template</label>
                     <select
                       value={formData.template}
-                      onChange={(e) => setFormData(prev => ({ ...prev, template: e.target.value as TemplateType }))}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, template: e.target.value as TemplateType }))
+                      }
                       className="editorial-input text-xs appearance-none bg-white font-medium"
                     >
                       <option value="royal-wedding">Indian Royal Wedding</option>
@@ -1623,9 +1609,9 @@ export default function Builder() {
                         onClick={() => openImageEditor("cover", formData.coverImage || null, undefined, 16 / 9)}
                       />
                       <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                         <div className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white">
-                            <Edit2 className="w-3.5 h-3.5 text-editorial-accent" />
-                         </div>
+                        <div className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white">
+                          <Edit2 className="w-3.5 h-3.5 text-editorial-accent" />
+                        </div>
                       </div>
                     </div>
                     <p className="text-[9px] text-slate-400 font-medium leading-relaxed italic">
@@ -1644,7 +1630,7 @@ export default function Builder() {
                     <button
                       onClick={() => {
                         const newGallery = [...(formData.galleryImages || [])];
-                        newGallery.push(""); // Add empty placeholder
+                        newGallery.push("");
                         const newIdx = newGallery.length - 1;
                         setFormData({ ...formData, galleryImages: newGallery });
                         openImageEditor("gallery", null, newIdx, 1);
@@ -1655,7 +1641,7 @@ export default function Builder() {
                       <Plus className="w-4 h-4" />
                     </button>
                   </div>
-                  
+
                   <div className="grid grid-cols-3 gap-3">
                     {formData.galleryImages?.map((img, idx) => (
                       <div key={idx} className="relative aspect-square group">
@@ -1675,9 +1661,9 @@ export default function Builder() {
                         </button>
                       </div>
                     ))}
-                    
+
                     {(!formData.galleryImages || formData.galleryImages.length === 0) && (
-                      <button 
+                      <button
                         onClick={() => {
                           const newGallery = [""];
                           setFormData({ ...formData, galleryImages: newGallery });
@@ -1685,14 +1671,13 @@ export default function Builder() {
                         }}
                         className="col-span-3 border-2 border-dashed border-editorial-border rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-slate-300 hover:text-editorial-accent hover:border-editorial-accent transition-all bg-editorial-bg/30"
                       >
-                         <Images className="w-6 h-6" />
-                         <span className="text-[10px] font-bold uppercase tracking-widest">Start your gallery</span>
+                        <Images className="w-6 h-6" />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Start your gallery</span>
                       </button>
                     )}
                   </div>
                 </div>
               </div>
-
             </div>
 
             {/* Sidebar Publish Button */}
@@ -1747,9 +1732,7 @@ export default function Builder() {
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2 px-3 py-1.5 bg-editorial-bg rounded-lg border border-editorial-border">
                 <Globe className="w-3.5 h-3.5 text-editorial-muted" />
-                <span className="text-[10px] font-mono text-editorial-ink opacity-70">
-                  /story/{siteSlug}
-                </span>
+                <span className="text-[10px] font-mono text-editorial-ink opacity-70">/story/{siteSlug}</span>
               </div>
 
               <div className="h-4 w-px bg-editorial-border hidden md:block" />
@@ -1790,26 +1773,18 @@ export default function Builder() {
                     : "bg-white border border-editorial-border text-editorial-ink hover:bg-editorial-bg"
                 }`}
               >
-                {isPreviewMode ? (
-                  <Minimize2 className="w-3.5 h-3.5" />
-                ) : (
-                  <Maximize2 className="w-3.5 h-3.5" />
-                )}
+                {isPreviewMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
                 <span>{isPreviewMode ? "Exit Preview" : "Preview Mode"}</span>
               </button>
 
               <div className="h-4 w-px bg-editorial-border mx-2" />
-              
+
               <button
                 onClick={handleSaveDraft}
                 disabled={isSavingDraft}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all bg-white border border-editorial-border text-editorial-ink hover:bg-editorial-bg disabled:opacity-60"
               >
-                {isSavingDraft ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Save className="w-3.5 h-3.5" />
-                )}
+                {isSavingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                 <span>{isSavingDraft ? "Saving..." : "Save Draft"}</span>
               </button>
 
@@ -1845,7 +1820,9 @@ export default function Builder() {
                       ) : (
                         <RefreshCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-700" />
                       )}
-                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] relative z-10">Redeploy Story</span>
+                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] relative z-10">
+                        Redeploy Story
+                      </span>
                     </motion.button>
                     <div className="absolute -top-3 -right-2 px-2 py-0.5 bg-editorial-accent text-white text-[8px] font-bold uppercase tracking-tighter rounded-full border-2 border-white shadow-xl pointer-events-none whitespace-nowrap z-20">
                       Changes Pending
@@ -1983,7 +1960,7 @@ export default function Builder() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="bg-white w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden p-8"
             >
-              <button 
+              <button
                 onClick={() => setShowPricingModal(false)}
                 disabled={isProcessingPayment}
                 className="absolute top-6 right-6 p-2 hover:bg-neutral-100 rounded-full transition-colors"
@@ -1996,11 +1973,11 @@ export default function Builder() {
                   <Rocket className="w-8 h-8 text-editorial-accent" />
                 </div>
                 <h2 className="text-3xl font-serif italic mb-2">Publish Your Story</h2>
-                <p className="text-xs uppercase tracking-widest text-editorial-muted">
-                  {templateConfig?.name} Template
-                </p>
+                <p className="text-xs uppercase tracking-widest text-editorial-muted">{templateConfig?.name} Template</p>
                 <div className="flex items-center justify-center gap-2 mt-4">
-                  <span className="text-4xl font-serif font-bold text-editorial-ink">₹{templatePrices[formData.template || "royal-wedding"] || 999}</span>
+                  <span className="text-4xl font-serif font-bold text-editorial-ink">
+                    ₹{templatePrices[formData.template || "royal-wedding"] || 999}
+                  </span>
                   <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted">One-time</span>
                 </div>
               </div>
@@ -2026,15 +2003,15 @@ export default function Builder() {
                   disabled={isProcessingPayment}
                   className="w-full bg-editorial-ink text-white py-4 rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2"
                 >
-                  {isProcessingPayment ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-4 h-4" />
-                  )}
-                  {isProcessingPayment ? "Processing..." : `Pay ₹${templatePrices[formData.template || "royal-wedding"] || 999} & Publish`}
+                  {isProcessingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {isProcessingPayment
+                    ? "Processing..."
+                    : `Pay ₹${templatePrices[formData.template || "royal-wedding"] || 999} & Publish`}
                 </button>
                 <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-widest bg-editorial-bg py-2 rounded-lg border border-editorial-border/40">
-                  AFTER {calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 999)} VIEWS, TOP UP <span className="text-editorial-ink font-bold">₹99</span> TO GET <span className="text-editorial-ink font-bold">1000 MORE VIEWS</span>
+                  AFTER {calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 999)} VIEWS, TOP UP{" "}
+                  <span className="text-editorial-ink font-bold">₹99</span> TO GET{" "}
+                  <span className="text-editorial-ink font-bold">1000 MORE VIEWS</span>
                 </p>
               </div>
             </motion.div>
@@ -2059,7 +2036,7 @@ export default function Builder() {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="bg-white w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden p-8"
             >
-              <button 
+              <button
                 onClick={() => setShowRedeployModal(false)}
                 disabled={isProcessingPayment}
                 className="absolute top-6 right-6 p-2 hover:bg-neutral-100 rounded-full transition-colors"
@@ -2078,7 +2055,9 @@ export default function Builder() {
                 <div className="flex items-center justify-center gap-2 mt-4">
                   <span className="text-4xl font-serif font-bold text-editorial-ink">₹99</span>
                   <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted text-left">
-                    Redeploy Fee<br />ONE-TIME
+                    Redeploy Fee
+                    <br />
+                    ONE-TIME
                   </span>
                 </div>
               </div>
@@ -2109,9 +2088,7 @@ export default function Builder() {
                   ) : (
                     <Check className="w-5 h-5 group-hover:scale-110 transition-transform text-editorial-accent" />
                   )}
-                  <span className="relative z-10">
-                    {isProcessingPayment ? "Processing..." : `PAY ₹99 & REDEPLOY`}
-                  </span>
+                  <span className="relative z-10">{isProcessingPayment ? "Processing..." : `PAY ₹99 & REDEPLOY`}</span>
                 </button>
                 <div className="mt-4 text-center">
                   <p className="text-[10px] text-editorial-muted font-medium uppercase tracking-[0.1em]">
@@ -2150,14 +2127,18 @@ export default function Builder() {
 
               <div className="space-y-6">
                 <div>
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-editorial-muted mb-3 block">Live Link</label>
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-editorial-muted mb-3 block">
+                    Live Link
+                  </label>
                   <div className="flex items-center gap-2 p-5 bg-editorial-bg border border-editorial-border rounded-2xl">
                     <span className="text-xs font-mono text-editorial-ink truncate flex-1 font-medium">
                       {window.location.origin}/invitation/{publishedInviteId || siteSlug}
                     </span>
-                    <button 
+                    <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/invitation/${publishedInviteId || siteSlug}`);
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/invitation/${publishedInviteId || siteSlug}`
+                        );
                         toast.success("Link copied!");
                       }}
                       className="p-2 hover:bg-white rounded-lg transition-all shadow-sm border border-transparent hover:border-editorial-border"
@@ -2166,19 +2147,19 @@ export default function Builder() {
                     </button>
                   </div>
                 </div>
-  
+
                 <div className="grid grid-cols-1 gap-3">
-                  <button 
-                    onClick={() => window.open(`/invitation/${publishedInviteId || siteSlug}`, '_blank')}
+                  <button
+                    onClick={() => window.open(`/invitation/${publishedInviteId || siteSlug}`, "_blank")}
                     className="flex items-center justify-center gap-3 py-4 bg-editorial-ink text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg"
                   >
                     <ExternalLink className="w-4 h-4" />
                     Visit Live story
                   </button>
-                  <button 
+                  <button
                     onClick={() => {
                       const text = `Join us for our special day! ❤️ View our cinematic story here: ${window.location.origin}/invitation/${publishedInviteId || siteSlug}`;
-                      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
                     }}
                     className="flex items-center justify-center gap-3 py-4 bg-[#25D366] text-white rounded-2xl text-[10px] font-bold uppercase tracking-widest hover:opacity-90 transition-all shadow-lg"
                   >
@@ -2187,7 +2168,7 @@ export default function Builder() {
                   </button>
                 </div>
 
-                <button 
+                <button
                   onClick={() => setShowFinalSuccessModal(false)}
                   className="w-full text-[10px] font-bold uppercase tracking-widest text-editorial-muted hover:text-editorial-ink pt-4 transition-colors"
                 >
@@ -2239,7 +2220,9 @@ export default function Builder() {
                     </span>
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/invitation/${publishedInviteId || siteSlug}`);
+                        navigator.clipboard.writeText(
+                          `${window.location.origin}/invitation/${publishedInviteId || siteSlug}`
+                        );
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
                       }}
