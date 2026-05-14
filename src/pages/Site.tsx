@@ -83,7 +83,7 @@ export default function Site() {
       <SEO 
         title={`${d.brideName} & ${d.groomName}'s Wedding Invitation`}
         description={`You are cordially invited to celebrate the wedding of ${d.brideName} and ${d.groomName} on ${d.weddingDate}. View the cinematic story here.`}
-        ogImage={typeof d.coverImage === 'string' ? d.coverImage : d.coverImage?.url}
+        ogImage={typeof d.coverImage === 'string' ? d.coverImage : (d.coverImage?.url || "")}
       />
       <TemplateComponent
         brideName={d.brideName || ""}
@@ -98,16 +98,21 @@ export default function Site() {
         story={d.story}
         enable3D={d.enable3D}
         enableEnvelope={d.enableEnvelope}
-        coverImage={d.coverImage}
-        events={d.events || []}
-        galleryImages={d.galleryImages || []}
+        coverImage={typeof d.coverImage === 'string' ? d.coverImage : (d.coverImage?.url || "")}
+        events={(d.events || []).map((ev: any) => ({
+          ...ev,
+          image: typeof ev.image === 'string' ? ev.image : (ev.image?.url || "")
+        }))}
+        galleryImages={(d.galleryImages || []).map((img: any) =>
+          typeof img === "string" ? img : (img?.url || "")
+        )}
         deity={d.deity}
         eventName={d.eventName}
         muhurtham={d.muhurtham}
         family={d.family}
         hosts={{ primary: d.brideName || "", secondary: d.groomName || "" }}
         address={d.venueAddress || d.location}
-        image={d.coverImage}
+        image={typeof d.coverImage === 'string' ? d.coverImage : (d.coverImage?.url || "")}
       />
     </>
   );

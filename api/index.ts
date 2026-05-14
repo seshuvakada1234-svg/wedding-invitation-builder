@@ -4,7 +4,7 @@ import { verifyUser, verifyAdmin } from "../src/lib/authServer.js";
 import admin from "firebase-admin";
 import Razorpay from "razorpay";
 import crypto from "crypto";
-import { formidable } from "formidable";
+import formidable from "formidable";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import fs from "fs";
 
@@ -57,27 +57,28 @@ function normalizeInvitationImages(data: any): any {
     
     // If it's a string URL
     if (typeof val === "string") {
+      let trimmed = val.trim();
+      
       // 1. Detect blob URLs - these are broken for public users
-      if (val.startsWith("blob:")) return null; 
+      if (trimmed.startsWith("blob:")) return null; 
       
       // 2. Detect local/development paths
-      if (val.startsWith("http://localhost") || val.startsWith("http://127.0.0.1")) return null;
+      if (trimmed.startsWith("http://localhost") || trimmed.startsWith("http://127.0.0.1")) return null;
       
       // 3. Fix internal R2 endpoint URLs to use public CDN if available
+      const publicUrl = (process.env.R2_PUBLIC_URL || "").trim().replace(/^["'](.+)["']$/, "$1").replace(/\/$/, "");
       const r2Endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["'](.+)["']$/, "$1");
       const bucket = (process.env.R2_BUCKET || "").trim().replace(/^["'](.+)["']$/, "$1");
       
-      if (publicUrl && (val.includes(r2Endpoint) || val.includes(".r2.cloudflarestorage.com"))) {
-        // Extract the key part (usually users/userId/inviteId/timestamp-name.ext)
-        // A common pattern is endpoint/bucket/key or endpoint/key
-        const urlParts = val.split("/");
-        // Attempt to find where 'users/' starts
+      if (publicUrl && (trimmed.includes(r2Endpoint) || trimmed.includes(".r2.cloudflarestorage.com"))) {
+        const urlParts = trimmed.split("/");
         const usersIndex = urlParts.indexOf("users");
         if (usersIndex !== -1) {
           const key = urlParts.slice(usersIndex).join("/");
           return `${publicUrl}/${key}`;
         }
       }
+      return trimmed;
     }
     return val;
   };
@@ -230,7 +231,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { id, ...data } = req.body;
       if (!id) return res.status(400).json({ success: false, error: "ID required" });
       
-      const sanitizedData = sanitizeFirestoreData(data);
+      const normalizedData = normalizeInvitationImages(data);
+      const sanitizedData = sanitizeFirestoreData(normalizedData);
       
       await adminDb.collection("invites").doc(id).set(
         { ...sanitizedData, userId: tokenUserId, slug: id, published: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() },
@@ -564,8 +566,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         maxTotalFileSize: 50 * 1024 * 1024
       });
       const [fields, files] = await form.parse(req as any);
-      const file = Array.isArray(files.file) ? files.file[0] : files.file;
-      if (!file) return res.status(400).json({ success: false, error: "No file" });
+      
+      const uploadedFile = files.file || files.image || files.photo || files.coverImage || files.gallery;
+      const file = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile;
+      
+      if (!file) {
+        console.error("FILES RECEIVED:", files);
+        return res.status(400).json({ success: false, error: "No file uploaded" });
+      }
+
       const userId = Array.isArray(fields.userId) ? fields.userId[0] : fields.userId as string;
       const inviteId = Array.isArray(fields.inviteId) ? fields.inviteId[0] : fields.inviteId as string;
       const timestamp = Date.now();

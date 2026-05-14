@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { formidable } from "formidable";
+import formidable from "formidable";
 import fs from "fs";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import dotenv from "dotenv";
@@ -133,25 +133,27 @@ function normalizeInvitationImages(data: any): any {
     
     // If it's a string URL
     if (typeof val === "string") {
+      let trimmed = val.trim();
+      
       // 1. Detect blob URLs - these are broken for public users
-      if (val.startsWith("blob:")) return null; 
+      if (trimmed.startsWith("blob:")) return null; 
       
       // 2. Detect local/development paths
-      if (val.startsWith("http://localhost") || val.startsWith("http://127.0.0.1")) return null;
+      if (trimmed.startsWith("http://localhost") || trimmed.startsWith("http://127.0.0.1")) return null;
       
       // 3. Fix internal R2 endpoint URLs to use public CDN if available
       const r2Endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/^["'](.+)["']$/, "$1");
       const bucket = (process.env.R2_BUCKET || "").trim().replace(/^["'](.+)["']$/, "$1");
       
-      if (publicUrl && (val.includes(r2Endpoint) || val.includes(".r2.cloudflarestorage.com"))) {
-        // Extract the key part (usually users/userId/inviteId/timestamp-name.ext)
-        const urlParts = val.split("/");
+      if (publicUrl && (trimmed.includes(r2Endpoint) || trimmed.includes(".r2.cloudflarestorage.com"))) {
+        const urlParts = trimmed.split("/");
         const usersIndex = urlParts.indexOf("users");
         if (usersIndex !== -1) {
           const key = urlParts.slice(usersIndex).join("/");
           return `${publicUrl}/${key}`;
         }
       }
+      return trimmed;
     }
     return val;
   };
@@ -239,8 +241,11 @@ async function startServer() {
 
       const [fields, files] = await form.parse(req);
       
-      const file = Array.isArray(files.file) ? files.file[0] : files.file;
+      const uploadedFile = files.file || files.image || files.photo || files.coverImage || files.gallery;
+      const file = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile;
+      
       if (!file) {
+        console.error("FILES RECEIVED:", files);
         return res.status(400).json({ success: false, error: "No file uploaded" });
       }
 
@@ -534,7 +539,8 @@ async function startServer() {
         return res.status(503).json({ success: false, error: "Database configuration error." });
       }
 
-      const sanitizedData = sanitizeFirestoreData(data);
+      const normalizedData = normalizeInvitationImages(data);
+      const sanitizedData = sanitizeFirestoreData(normalizedData);
 
       const inviteData: any = {
         ...sanitizedData,

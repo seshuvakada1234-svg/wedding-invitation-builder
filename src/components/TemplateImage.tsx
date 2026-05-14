@@ -80,9 +80,13 @@ export default function TemplateImage({
         alt={alt}
         className="w-full h-full object-cover"
         referrerPolicy="no-referrer"
+        loading="lazy"
         onError={(e) => {
-          console.error("Image load failed:", finalUrl);
-          e.currentTarget.src = fallbackUrl;
+          const target = e.currentTarget;
+          if (target.src !== fallbackUrl) {
+            console.error("Image load failed, using fallback:", finalUrl);
+            target.src = fallbackUrl;
+          }
         }}
       />
     );
