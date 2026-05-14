@@ -494,6 +494,17 @@ export default function Builder() {
     prevTemplateRef.current = formData.template;
   }, [formData.template, isFetchingInvite]);
 
+  useEffect(() => {
+    if (showFinalSuccessModal && publishedInviteId) {
+      const timer = setTimeout(() => {
+        if (showFinalSuccessModal) {
+          navigate(`/invitation/${publishedInviteId}`);
+        }
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [showFinalSuccessModal, publishedInviteId, navigate]);
+
   // ── Loading screen ──────────────────────────────────────────────────────────
   if (authLoading || isFetchingInvite) {
     return (
@@ -1258,17 +1269,6 @@ export default function Builder() {
       setIsProcessingPayment(false);
     }
   };
-
-  useEffect(() => {
-    if (showFinalSuccessModal && publishedInviteId) {
-      const timer = setTimeout(() => {
-        if (showFinalSuccessModal) {
-          navigate(`/invitation/${publishedInviteId}`);
-        }
-      }, 8000);
-      return () => clearTimeout(timer);
-    }
-  }, [showFinalSuccessModal, publishedInviteId, navigate]);
 
   // ─── Viewport helpers ────────────────────────────────────────────────────────
 
