@@ -435,92 +435,204 @@ async function startServer() {
       }
     });
 
-  // ── Save Invite ────────────────────────────────────────────────────────────
+  // ── Save Invite (Publish) ──────────────────────────────────────────────────
   app.post("/api/save-invite", async (req, res) => {
-    console.log("Save invite request received");
+    console.log("Save invite (publish) request received");
     try {
-      // ✅ Verify auth token
       const tokenUserId = await verifyUser(req);
-
       const { id, ...data } = req.body;
-      if (!id) {
-        return res.status(400).json({ success: false, error: "Invitation ID is required" });
-      }
+      if (!id) return res.status(400).json({ success: false, error: "Invitation ID is required" });
 
       const db = getAdminDb();
-      if (!db) {
-        return res.status(503).json({
-          success: false,
-          error: "Database configuration error.",
-          code: "DB_INIT_ERROR",
-        });
-      }
+      if (!db) return res.status(503).json({ success: false, error: "DB error" });
 
-      // ✅ Use verified token userId, not body userId
       const userDoc = await db.collection("users").doc(tokenUserId).get();
       const userData = userDoc.data() || {};
       
-      const template = (req.body.template || data.template || "minimal").toString().trim();
-      const normalizedTemplate = template.toLowerCase();
-
-      // ✅ Payment gate — block save if not paid for this template
+      const templateId = (data.templateId || data.template || "royal-wedding").toString().trim();
+      
+      // Payment gate
       const isUserPaid = userData.paid === true || 
-        (userData.paidTemplates && (
-          userData.paidTemplates[template] === true || 
-          userData.paidTemplates[normalizedTemplate] === true
-        )) ||
-        userData[`paidTemplates.${template}`] === true ||
-        userData[`paidTemplates.${normalizedTemplate}`] === true;
+        (userData.paidTemplates && userData.paidTemplates[templateId] === true);
 
-      // ✅ Payment gate — block save if not paid
       if (!isUserPaid) {
-        console.error(`Payment check: Fail in server.ts. User: ${tokenUserId}, Template: ${template}, Normalized: ${normalizedTemplate}, PaidTemplates:`, userData.paidTemplates);
-        return res.status(402).json({
-          success: false,
-          error: "paymentRequired",
-          details: { template, userId: tokenUserId },
-          redirect: "/pricing",
-        });
+        return res.status(402).json({ success: false, error: "paymentRequired" });
       }
 
-      const normalizedSaveData = normalizeInvitationImages(data);
-      const sanitizedData = sanitizeFirestoreData(normalizedSaveData);
-
+      const sanitizedData = sanitizeFirestoreData(normalizeInvitationImages(data));
+      const draftData = sanitizedData.draftData || sanitizedData;
+      
       const inviteData: any = {
         ...sanitizedData,
-        template,
+        id,
         userId: tokenUserId,
-        isPaid: true,
-        slug: id, // Ensure slug is same as id if not provided
+        templateId,
+        status: 'live',
+        publishedData: draftData, // COPY DRAFT TO PUBLISHED
+        hasUnpublishedChanges: false,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        publishedAt: data.publishedAt || admin.firestore.FieldValue.serverTimestamp(),
       };
 
-      // ✅ Dynamically ensure freeViews if not already set or if template changed
-      try {
-        const templateDoc = await db.collection("templates").doc(template).get();
-        if (templateDoc.exists) {
-          const tData = templateDoc.data();
-          const price = Number(tData?.publishPrice || 499);
-          inviteData.templatePrice = price;
-          // Only update if it doesn't exist or if we want to ensure it's synced with the current template price
-          // For now, let's always sync it to keep it simple and fair
-          inviteData.freeViews = calculateFreeViews(price);
-        } else {
-           // Fallback to default if template doc missing
-           inviteData.freeViews = 500;
-        }
-      } catch (e) {
-        console.warn("Error auto-setting freeViews during save:", e);
+      // Set view limits if not present
+      const currentInvite = await db.collection("invites").doc(id).get();
+      if (!currentInvite.exists || !currentInvite.data()?.viewsLimit) {
+         const templateDoc = await db.collection("templates").doc(templateId).get();
+         const price = Number(templateDoc.data()?.publishPrice || 999);
+         inviteData.viewsLimit = calculateFreeViews(price);
+         inviteData.viewsUsed = 0;
       }
 
       await db.collection("invites").doc(id).set(inviteData, { merge: true });
       res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Save invite error:", error);
-      res.status(500).json({
-        success: false,
-        error: error instanceof Error ? error.message : "Internal Server Error",
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Redeploy (Paid Update) ──────────────────────────────────────────────────
+  app.post("/api/redeploy", async (req, res) => {
+    console.log("Redeploy request received");
+    try {
+      const tokenUserId = await verifyUser(req);
+      const { id } = req.body;
+      if (!id) return res.status(400).json({ success: false, error: "ID required" });
+
+      const db = getAdminDb();
+      if (!db) return res.status(503).json({ success: false, error: "DB error" });
+      
+      const inviteRef = db.collection("invites").doc(id);
+      const inviteSnap = await inviteRef.get();
+      const inviteData = inviteSnap.data();
+
+      if (!inviteData || inviteData.userId !== tokenUserId) {
+        return res.status(403).json({ success: false, error: "Unauthorized" });
+      }
+
+      const latestDraft = inviteData.draftData;
+      await inviteRef.update({
+        publishedData: latestDraft,
+        hasUnpublishedChanges: false,
+        redeployAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Redeploy error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Create Redeploy Order (₹99) ──────────────────────────────────────────────
+  app.post("/api/create-redeploy-order", async (req, res) => {
+    try {
+      const tokenUserId = await verifyUser(req);
+      const rp = getRazorpay();
+      
+      const amountInRupees = 99; // Flat redeploy fee
+      const amountInPaise = amountInRupees * 100;
+
+      const order = await rp.orders.create({
+        amount: amountInPaise,
+        currency: "INR",
+        receipt: `redeploy_${Date.now()}`,
+      });
+
+      res.json({ success: true, order, amount: amountInPaise });
+    } catch (error: any) {
+      console.error("Create redeploy order error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Verify Redeploy Payment ────────────────────────────────────────────────
+  app.post("/api/verify-redeploy-payment", async (req, res) => {
+    try {
+      const {
+        razorpay_order_id,
+        razorpay_payment_id,
+        razorpay_signature,
+        inviteId
+      } = req.body;
+
+      const tokenUserId = await verifyUser(req);
+      
+      const key_secret = process.env.RAZORPAY_KEY_SECRET?.trim().replace(/^["'](.+)["']$/, "$1");
+      if (!key_secret) throw new Error("Razorpay secret missing.");
+
+      const hmac = crypto.createHmac("sha256", key_secret);
+      hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
+      const generated_signature = hmac.digest("hex");
+
+      if (generated_signature !== razorpay_signature) {
+        return res.status(400).json({ success: false, error: "Invalid signature" });
+      }
+
+      const db = getAdminDb();
+      if (!db) return res.status(503).json({ success: false, error: "DB error" });
+
+      const inviteRef = db.collection("invites").doc(inviteId);
+      const inviteSnap = await inviteRef.get();
+      
+      if (!inviteSnap.exists || inviteSnap.data()?.userId !== tokenUserId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+
+      const inviteData = inviteSnap.data()!;
+      const latestDraft = inviteData.draftData;
+
+      // Update the published live data with the draft
+      await inviteRef.update({
+        publishedData: latestDraft,
+        hasUnpublishedChanges: false,
+        redeployAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      // Record payment
+      await db.collection("payments").add({
+        userId: tokenUserId,
+        inviteId,
+        type: "redeploy",
+        amount: 99,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Verify redeploy error:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ── Increment Views (Atomic) ───────────────────────────────────────────────
+  app.post("/api/increment-views", async (req, res) => {
+    try {
+      const { inviteId } = req.body;
+      if (!inviteId) return res.status(400).json({ success: false, error: "ID required" });
+
+      const db = getAdminDb();
+      const inviteRef = db!.collection("invites").doc(inviteId);
+      
+      const inviteSnap = await inviteRef.get();
+      if (!inviteSnap.exists) return res.status(404).json({ success: false, error: "Not found" });
+
+      const data = inviteSnap.data()!;
+      const viewsUsed = (data.viewsUsed || 0) + 1;
+      const viewsLimit = data.viewsLimit || data.viewLimit || data.freeViews || 500;
+
+      await inviteRef.update({
+        viewsUsed: admin.firestore.FieldValue.increment(1),
+        limitExceeded: viewsUsed >= viewsLimit
+      });
+
+      res.json({ success: true, exceeded: viewsUsed >= viewsLimit });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 
@@ -529,23 +641,17 @@ async function startServer() {
     try {
       const tokenUserId = await verifyUser(req);
       const { id, ...data } = req.body;
-
-      if (!id) {
-        return res.status(400).json({ success: false, error: "Invitation ID is required" });
-      }
+      if (!id) return res.status(400).json({ success: false, error: "ID required" });
 
       const db = getAdminDb();
-      if (!db) {
-        return res.status(503).json({ success: false, error: "Database configuration error." });
-      }
+      if (!db) return res.status(503).json({ success: false, error: "DB error" });
 
-      const normalizedData = normalizeInvitationImages(data);
-      const sanitizedData = sanitizeFirestoreData(normalizedData);
+      const sanitizedData = sanitizeFirestoreData(normalizeInvitationImages(data));
 
       const inviteData: any = {
         ...sanitizedData,
         userId: tokenUserId,
-        slug: id,
+        hasUnpublishedChanges: true,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
@@ -742,6 +848,7 @@ async function startServer() {
       await inviteRef.update({
         hasUnpublishedChanges: false,
         lastPublishedAt: admin.firestore.FieldValue.serverTimestamp(),
+        publishedData: inviteSnap.data()?.draftData, // Transfer draft to live
         redeployCount: admin.firestore.FieldValue.increment(1),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });

@@ -413,22 +413,6 @@ export default function SouthIndiaTemplate({
           transition={{ duration: 2, delay: 0.5 }}
           className={`${hasEntered ? 'block' : 'hidden'} relative z-0`}
         >
-          {/* Premium Badge & Watermark */}
-          {(!isPaid && !isEditable) && (
-            <div className="fixed inset-0 z-[100] pointer-events-none overflow-hidden select-none">
-              <div className="absolute top-20 right-[-100px] rotate-45 bg-[#d4af37] text-white px-40 py-2 shadow-2xl flex items-center justify-center gap-2 border-y border-white/20">
-                <Gem className="w-4 h-4" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.4em]">South India Premium</span>
-              </div>
-              
-              {/* Draft Watermark */}
-              <div className="absolute bottom-20 left-1/2 -translate-x-1/2 opacity-20 flex flex-col items-center gap-2">
-                <Crown className="w-12 h-12 text-purple-900" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.5em] text-purple-900">Royal Invitation Preview</span>
-              </div>
-            </div>
-          )}
-
           {/* Locked Features Overlay for Non-Paid Drafts */}
           {(!isPaid && isEditable) && (
             <div className="fixed bottom-0 left-0 right-0 z-50 p-6 flex justify-center pointer-events-none">

@@ -42,10 +42,10 @@ export default function Dashboard() {
   const [userProfile, setUserProfile] = useState<any>(null);
 
   const stats = useMemo(() => {
-    const totalViews = sites.reduce((acc, site) => acc + (Number(site.views) || 0), 0);
-    const activeInvitations = sites.filter(s => s.published).length;
-    const drafts = sites.filter(s => !s.published).length;
-    return { totalViews, activeInvitations, drafts };
+    const totalViews = sites.reduce((acc, site) => acc + (Number(site.viewsUsed || site.views) || 0), 0);
+    const liveInvitations = sites.filter(s => s.status === 'live' || s.published === true).length;
+    const drafts = sites.filter(s => s.status !== 'live' && s.published !== true).length;
+    return { totalViews, liveInvitations, drafts };
   }, [sites]);
 
   async function fetchUserProfile() {
@@ -201,12 +201,40 @@ export default function Dashboard() {
          </motion.div>
       </div>
 
+      {/* Paywall Alerts */}
+      {sites.some(s => (s.viewsUsed || 0) >= (s.viewsLimit || 500)) && (
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-12 p-6 bg-red-50 border border-red-100 rounded-[32px] flex flex-col md:flex-row items-center justify-between gap-6"
+        >
+           <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center">
+                 <Rocket className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                 <h3 className="font-serif italic text-xl text-red-900">View Limit Reached</h3>
+                 <p className="text-xs text-red-700">One or more of your invitations are hidden because they exceeded the guest view limit.</p>
+              </div>
+           </div>
+           <button 
+             onClick={() => {
+               const exceeded = sites.find(s => (s.viewsUsed || 0) >= (s.viewsLimit || 500));
+               if (exceeded) handleTopUp(exceeded);
+             }}
+             className="px-6 py-3 bg-red-600 text-white rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg"
+           >
+              Top Up Now
+           </button>
+        </motion.div>
+      )}
+
       {/* Stats Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
          {[
            { label: "Total Invitations", value: sites.length, icon: Layers, color: "text-blue-600", bg: "bg-blue-50" },
            { label: "Guest Views", value: stats.totalViews.toLocaleString(), icon: Eye, color: "text-purple-600", bg: "bg-purple-50" },
-           { label: "Active Events", value: stats.activeInvitations, icon: Calendar, color: "text-green-600", bg: "bg-green-50" },
+           { label: "Active Live", value: stats.liveInvitations, icon: Calendar, color: "text-green-600", bg: "bg-green-50" },
            { label: "Purchased", value: Object.keys(userProfile?.paidTemplates || {}).length, icon: Sparkles, color: "text-editorial-accent", bg: "bg-yellow-50" }
          ].map((stat, i) => (
            <motion.div
@@ -232,7 +260,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between mb-8 border-b border-editorial-border pb-4">
           <h2 className="text-xl font-serif italic text-editorial-ink">Your Invitations</h2>
           <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-editorial-muted">
-            <span>{stats.activeInvitations} Live</span>
+            <span>{stats.liveInvitations} Live</span>
             <span>•</span>
             <span>{stats.drafts} Drafts</span>
           </div>
@@ -265,7 +293,7 @@ export default function Dashboard() {
 
           return (
             <motion.div
-              key={site.slug}
+              key={site.id || site.slug}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.1 }}
@@ -288,10 +316,10 @@ export default function Dashboard() {
               <div className="flex-1 space-y-4">
                 <div className="flex items-center gap-3">
                   <h3 className="font-serif italic text-2xl">{site.brideName} & {site.groomName}</h3>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${site.published ? 'bg-green-100 text-green-700' : 'bg-editorial-bg text-editorial-muted border border-editorial-border/60'}`}>
-                    {site.published ? 'Live' : 'Draft'}
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest ${(site.status === 'live' || site.published === true) ? 'bg-green-100 text-green-700' : 'bg-editorial-bg text-editorial-muted border border-editorial-border/60'}`}>
+                    {(site.status === 'live' || site.published === true) ? 'Live' : 'Draft'}
                   </span>
-                  {site.published && site.hasUnpublishedChanges && (
+                  {(site.status === 'live' || site.published === true) && site.hasUnpublishedChanges && (
                     <motion.span 
                       initial={{ opacity: 0.5 }}
                       animate={{ opacity: 1 }}
@@ -326,7 +354,7 @@ export default function Dashboard() {
                    <div className="flex justify-between items-center mb-1.5 text-[10px] font-bold uppercase tracking-wider">
                       <span className="text-editorial-muted">Guest Views</span>
                       <span className={isWarning ? 'text-red-500 font-bold' : 'text-editorial-ink'}>
-                        {views} / {limit}
+                        {(site.viewsUsed || site.views || 0)} / {limit}
                       </span>
                    </div>
                    <div className="h-1.5 bg-editorial-border rounded-full overflow-hidden">
@@ -401,7 +429,7 @@ export default function Dashboard() {
                 </div>
                 <h2 className="text-2xl font-serif italic mb-2">Guest Views Limit</h2>
                 <p className="text-xs text-editorial-muted">
-                  Your invitation has used {selectedSiteForTopUp.views} of {selectedSiteForTopUp.viewLimit || selectedSiteForTopUp.freeViews || 500} views.
+                  Your invitation has used {selectedSiteForTopUp.viewsUsed || selectedSiteForTopUp.views || 0} of {selectedSiteForTopUp.viewsLimit || selectedSiteForTopUp.viewLimit || selectedSiteForTopUp.freeViews || 500} views.
                 </p>
                 <div className="mt-6 p-4 bg-editorial-bg rounded-2xl border border-editorial-border">
                   <div className="flex items-baseline justify-center gap-2">

@@ -178,7 +178,7 @@ export default function Admin() {
           setLiveStats(prev => ({
             ...prev,
             totalInvites: snap.size,
-            activeWebsites: docs.filter(d => d.isPaid === true).length
+            activeWebsites: docs.filter(d => d.status === 'live' || d.published === true).length
           }));
           
           const invitesList = snap.docs.map(d => ({ id: d.id, ...d.data() } as WeddingInvite));
@@ -599,13 +599,13 @@ function InviteTable({
                 {site.template}
               </td>
               <td className="px-6 py-4 text-center">
-                <p className="text-xs font-mono font-bold">{(site.views || 0).toLocaleString()}</p>
-                <p className="text-[9px] text-editorial-muted">limit: {site.freeViews || 500}</p>
+                <p className="text-xs font-mono font-bold">{(site.viewsUsed || site.views || 0).toLocaleString()}</p>
+                <p className="text-[9px] text-editorial-muted">limit: {site.viewsLimit || site.freeViews || 500}</p>
               </td>
               <td className="px-6 py-4">
-                {site.isPaid ? (
+                {(site.status === 'live' || site.published === true) ? (
                   <span className="flex items-center gap-1 text-green-600 font-bold uppercase text-[9px] tracking-widest">
-                    <Check className="w-3 h-3" /> Premium
+                    <Check className="w-3 h-3" /> Live
                   </span>
                 ) : (
                   <span className="flex items-center gap-1 text-amber-500 font-bold uppercase text-[9px] tracking-widest">

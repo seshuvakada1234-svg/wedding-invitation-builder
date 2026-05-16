@@ -310,21 +310,8 @@ export default function Builder() {
   });
 
   // ── Auto-save Draft ────────────────────────────────────────────────────────
-  const lastAutoSaveRef = useRef<string>("");
   useEffect(() => {
     if (!currentUser || authLoading || isFetchingInvite || !isEditMode) return;
-
-    const currentDataStr = JSON.stringify({
-      formData: formData,
-      activeDraft: getCurrentDataAsDraft(),
-    });
-
-    if (lastAutoSaveRef.current === "") {
-      lastAutoSaveRef.current = currentDataStr;
-      return;
-    }
-
-    if (lastAutoSaveRef.current === currentDataStr) return;
 
     const timer = setTimeout(async () => {
       try {
@@ -334,12 +321,18 @@ export default function Builder() {
         const currentDraft = getCurrentDataAsDraft();
         const inviteData: Partial<WeddingInvite> = {
           draftData: currentDraft,
+          templateId: currentTemplateId,
           templateDrafts: {
             ...(formData.templateDrafts || {}),
-            [formData.template || "royal-wedding"]: currentDraft,
+            [currentTemplateId]: currentDraft,
           },
           updatedAt: new Date().toISOString() as any,
-          hasUnpublishedChanges: true,
+          // Mirror display fields to root for easy listing
+          brideName: currentDraft.brideName,
+          groomName: currentDraft.groomName,
+          weddingDate: currentDraft.weddingDate,
+          location: currentDraft.location,
+          template: currentTemplateId,
         };
 
         await fetch("/api/save-draft", {
@@ -351,15 +344,14 @@ export default function Builder() {
           body: JSON.stringify({ id, ...inviteData }),
         });
 
-        lastAutoSaveRef.current = currentDataStr;
         console.log("Auto-save successful");
       } catch (err) {
         console.error("Auto-save failed:", err);
       }
-    }, 5000);
+    }, 3000); // 3 seconds debounce
 
     return () => clearTimeout(timer);
-  }, [formData, currentUser, authLoading, isFetchingInvite, isEditMode, inviteId, siteSlug]);
+  }, [formData, currentUser, authLoading, isFetchingInvite, isEditMode, inviteId, siteSlug, currentTemplateId]);
 
   // ── Load existing invite ────────────────────────────────────────────────────
   useEffect(() => {
@@ -385,105 +377,47 @@ export default function Builder() {
             return;
           }
 
-          // ── CORE FIX: Hydrate editor fields from draftData but preserve
-          // all lifecycle flags from the root document.
-          // The old code did { ...data, ...data.draftData } which let draftData
-          // (a TemplateDraft — no published/isPaid fields) clobber those flags
-          // to undefined, breaking the publish button and payment check.
-          const source = data.draftData || data;
+          // ── CORE HYDRATION ──
+          // Always load from draftData if available, otherwise fallback to root (for legacy)
+          const draft = data.draftData || data;
 
           setFormData({
-            // 1. Root document first — captures all lifecycle flags:
-            //    published, isPaid, paid, hasUnpublishedChanges, id, slug,
-            //    userId, views, viewLimit, createdAt, updatedAt, etc.
-            ...data,
-
-            // 2. Overlay ONLY editor/display fields from draftData.
-            //    These are the fields TemplateDraft contains.
-            //    We never spread the entire draftData object to avoid
-            //    overwriting lifecycle flags with undefined.
-            brideName: source.brideName,
-            groomName: source.groomName,
-            weddingDate: source.weddingDate,
-            location: source.location,
-            template: (source.template || data.template) as TemplateType,
-            coverImage: source.coverImage,
-            coverImageKey: source.coverImageKey,
-            galleryImages: source.galleryImages || [],
-            galleryImageKeys: source.galleryImageKeys || [],
-            events: source.events || [],
-            story: source.story,
-            muhurtham: source.muhurtham,
-            deity: source.deity,
-            family: source.family,
-            eventName: source.eventName,
-            enable3D: source.enable3D,
-            enableEnvelope: source.enableEnvelope,
-            googleMapsLink: source.googleMapsLink || "",
-            googleMapsEmbedUrl: source.googleMapsEmbedUrl,
-            venueAddress: source.venueAddress,
-            venueCity: source.venueCity,
-            coordinates: source.coordinates,
-            // Hydrate new CMS fields
-            primaryColor: source.primaryColor,
-            secondaryColor: source.secondaryColor,
-            accentColor: source.accentColor,
-            fontStyle: source.fontStyle,
-            headingFont: source.headingFont,
-            bodyFont: source.bodyFont,
-            borderRadius: source.borderRadius,
-            shadowIntensity: source.shadowIntensity,
-            animationStyle: source.animationStyle,
-            coupleNickname: source.coupleNickname,
-            familyNames: source.familyNames,
-            weddingHashtag: source.weddingHashtag,
-            coupleMonogram: source.coupleMonogram,
-            musicUrl: source.musicUrl,
-            autoplayMusic: source.autoplayMusic,
-            rsvpTitle: source.rsvpTitle,
-            rsvpSubtitle: source.rsvpSubtitle,
-            rsvpButtonText: source.rsvpButtonText,
-            whatsappNumber: source.whatsappNumber,
-            rsvpDeadline: source.rsvpDeadline,
-            timeline: source.timeline,
-            countdownDate: source.countdownDate,
-            seoTitle: source.seoTitle,
-            seoDescription: source.seoDescription,
-            ogImage: source.ogImage,
-            heroTitle: (source as any).heroTitle,
-            heroSubtitle: (source as any).heroSubtitle,
-            heroButtonText: (source as any).heroButtonText,
-            modalTitle: (source as any).modalTitle,
-            modalSubtitle: (source as any).modalSubtitle,
-            modalButtonText: (source as any).modalButtonText,
+            ...data, // Keep meta fields (views, status, etc.)
+            ...draft, // Overlay actual design content
+            templateId: data.templateId || draft.template || data.template || initialTemplate,
           });
 
+          // Memory for other templates
+          if (data.templateDrafts) {
+             setFormData(prev => ({ ...prev, templateDrafts: data.templateDrafts }));
+          }
+
           // Sync prevTemplateRef to avoid triggering the template switch effect on initial load
-          prevTemplateRef.current = source.template || data.template;
+          prevTemplateRef.current = draft.template || data.template;
           setIsEditMode(true);
           setHasUnpublishedChanges(data.hasUnpublishedChanges || false);
 
           // Set initial reference data AFTER loading so change-detection
           // doesn't fire immediately on open
           loadedDataRef.current = JSON.stringify({
-            brideName: source.brideName,
-            groomName: source.groomName,
-            weddingDate: source.weddingDate,
-            location: source.location,
-            venueAddress: source.venueAddress,
-            venueCity: source.venueCity,
-            googleMapsLink: source.googleMapsLink,
-            coordinates: source.coordinates,
-            story: source.story,
-            events: source.events,
-            galleryImages: source.galleryImages,
-            template: source.template,
-            muhurtham: source.muhurtham,
-            deity: source.deity,
-            family: source.family,
-            eventName: source.eventName,
-            enable3D: source.enable3D,
-            enableEnvelope: source.enableEnvelope,
+            brideName: draft.brideName,
+            groomName: draft.groomName,
+            weddingDate: draft.weddingDate,
+            location: draft.location,
+            venueAddress: draft.venueAddress,
+            venueCity: draft.venueCity,
+            googleMapsLink: draft.googleMapsLink,
+            coordinates: draft.coordinates,
+            story: draft.story,
+            events: draft.events,
+            galleryImages: draft.galleryImages,
+            template: draft.template,
+            muhurtham: draft.muhurtham,
+            deity: draft.deity,
+            family: draft.family,
+            eventName: draft.eventName,
+            enable3D: draft.enable3D,
+            enableEnvelope: draft.enableEnvelope,
           });
         } else {
           toast.error("Invitation not found.");
@@ -502,7 +436,7 @@ export default function Builder() {
     }
   }, [inviteId, authLoading, currentUser, navigate]);
 
-  // ── Sync template defaults ──────────────────────────────────────────────────
+  // ── Sync template drafts when switching ──────────────────────────────────────
   useEffect(() => {
     if (isFetchingInvite) return;
 
@@ -513,69 +447,61 @@ export default function Builder() {
       setFormData((prev) => {
         if (!prev) return prev;
 
-        const currentDataAsDraft = {
-          ...getCurrentDataAsDraft(prev),
-          template: oldTemplate as TemplateType,
-        };
-
+        // 1. Snapshot current design into templateDrafts[oldTemplate]
+        const currentDraft = getCurrentDataAsDraft(prev);
         const updatedDrafts = {
           ...(prev.templateDrafts || {}),
-          [oldTemplate]: currentDataAsDraft,
+          [oldTemplate]: currentDraft,
         };
 
-        const existingDraft = updatedDrafts[newTemplate];
+        // 2. Check if we have a saved draft for the new template
+        const existingNewDraft = updatedDrafts[newTemplate];
 
-        if (existingDraft) {
+        if (existingNewDraft) {
+          // Restore previous draft for this template
           return {
             ...prev,
-            ...existingDraft,
+            ...existingNewDraft,
             templateDrafts: updatedDrafts,
-            template: newTemplate as TemplateType,
+            template: newTemplate,
           };
         } else {
+          // New starting point for this template
           const defaultEventNames = TEMPLATE_DEFAULTS[newTemplate] || ["Wedding"];
-
-          const newTemplateState: TemplateDraft = {
-            template: newTemplate as TemplateType,
-            brideName: prev.brideName || "",
-            groomName: prev.groomName || "",
-            weddingDate: prev.weddingDate || "",
-            location: prev.location || "",
+          return {
+            ...prev,
+            templateDrafts: updatedDrafts,
+            template: newTemplate,
             galleryImages: GALLERY_DEFAULTS[newTemplate] || GALLERY_DEFAULTS["default"],
             events: defaultEventNames.map((name) => ({
               name,
-              date: prev.weddingDate || "TBD",
+              date: prev.weddingDate || "",
               time: "TBD",
-              location: prev.location || "TBD",
+              location: prev.location || "",
             })),
-            coverImage: undefined,
-            coverImageKey: undefined,
-            galleryImageKeys: [],
-            story: "",
-            muhurtham: "",
-            deity: "",
-            family: "",
-            eventName: "",
-            enable3D: true,
-            enableEnvelope: true,
-            googleMapsLink: "",
-            googleMapsEmbedUrl: "",
-            venueAddress: "",
-            venueCity: "",
-            coordinates: "",
-          };
-
-          return {
-            ...prev,
-            ...newTemplateState,
-            templateDrafts: updatedDrafts,
-            template: newTemplate as TemplateType,
           };
         }
       });
     }
     prevTemplateRef.current = formData.template;
   }, [formData.template, isFetchingInvite]);
+
+  // ─── Change Detection ───
+  useEffect(() => {
+    if (formData.status !== 'live' || !formData.publishedData) {
+      setHasUnpublishedChanges(false);
+      return;
+    }
+
+    const currentDraft = getCurrentDataAsDraft(formData);
+    const published = formData.publishedData;
+
+    // Simple JSON comparison for change detection
+    const draftStr = JSON.stringify(currentDraft);
+    const publishedStr = JSON.stringify(published);
+
+    setHasUnpublishedChanges(draftStr !== publishedStr);
+  }, [formData]);
 
   useEffect(() => {
     if (showFinalSuccessModal && publishedInviteId) {
@@ -970,29 +896,14 @@ export default function Builder() {
     }
 
     if (isSaving || isCheckingPayment) return;
-    if (showPricingModal && !forceSaveAfterPayment) return;
 
     setIsSaving(true);
-    if (!forceSaveAfterPayment) {
-      setIsCheckingPayment(true);
-    }
-
+    
     try {
-      let token: string;
-      try {
-        token = await currentUser.getIdToken();
-      } catch (tokenErr: any) {
-        console.error("Token refresh failed:", tokenErr.message);
-        if (tokenErr.code === "auth/network-request-failed") {
-          toast.error("Network connection error. Please check your internet and try again.");
-        } else {
-          toast.error("Session expired. Please log in again.");
-          navigate("/login");
-        }
-        return;
-      }
+      const token = await currentUser.getIdToken();
 
       if (!forceSaveAfterPayment) {
+        setIsCheckingPayment(true);
         const checkRes = await fetch("/api/check-user", {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -1001,13 +912,14 @@ export default function Builder() {
         });
 
         if (!checkRes.ok) {
-          const errText = await checkRes.text();
+          setIsCheckingPayment(false);
+          setIsSaving(false);
           if (checkRes.status === 401) {
             toast.error("Session expired. Please log in again.");
             navigate("/login");
             return;
           }
-          throw new Error(`User status check failed: ${errText.substring(0, 150)}`);
+          throw new Error("Failed to check payment status");
         }
 
         const userData = await checkRes.json();
@@ -1020,51 +932,52 @@ export default function Builder() {
             (userData.paidTemplates[currentTemplate] === true ||
               userData.paidTemplates[normalizedTemplate] === true));
 
+        setIsCheckingPayment(false);
+
         if (!isTemplatePaid) {
           setShowPricingModal(true);
+          setIsSaving(false);
           return;
         }
 
-        if (formData.published && hasUnpublishedChanges && !forceSaveAfterPayment) {
+        if (formData.status === 'live' && hasUnpublishedChanges) {
           setShowRedeployModal(true);
+          setIsSaving(false);
           return;
         }
       }
 
-      const dataWithDrafts = {
+      const dataToSave = {
         ...formData,
         templateDrafts: {
           ...(formData.templateDrafts || {}),
-          [formData.template || "minimal"]: getCurrentDataAsDraft(),
+          [formData.template || "royal-wedding"]: getCurrentDataAsDraft(),
         },
       };
 
-      const finalizedData = await uploadPendingImages(dataWithDrafts);
+      const finalizedData = await uploadPendingImages(dataToSave);
+      const currentDraft = getCurrentDataAsDraft(finalizedData);
+      
+      const id = inviteId || finalizedData.slug || siteSlug;
 
-      const currentTemplate = finalizedData.template || "royal-wedding";
-      const id = isEditMode
-        ? inviteId || finalizedData.slug || siteSlug
-        : finalizedData.slug || finalizedData.id || Math.random().toString(36).substring(2, 10);
-
-      const draftState = getCurrentDataAsDraft(finalizedData);
       const inviteData: Partial<WeddingInvite> = {
         ...finalizedData,
-        draftData: draftState,
-        publishedData: JSON.parse(JSON.stringify(draftState)),
+        draftData: currentDraft,
+        publishedData: currentDraft, // SYNC Draft to Live
         id,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
         email: currentUser.email || "",
         slug: id,
-        template: currentTemplate,
-        brideName: draftState.brideName,
-        groomName: draftState.groomName,
-        weddingDate: draftState.weddingDate,
-        location: draftState.location,
-        published: true,
+        template: currentDraft.template,
+        brideName: currentDraft.brideName,
+        groomName: currentDraft.groomName,
+        weddingDate: currentDraft.weddingDate,
+        location: currentDraft.location,
+        status: 'live',
         isPaid: true,
         hasUnpublishedChanges: false,
-        lastPublishedAt: new Date().toISOString(),
+        publishedAt: formData.publishedAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
@@ -1074,71 +987,27 @@ export default function Builder() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id, template: currentTemplate, ...inviteData }),
+        body: JSON.stringify({ id, ...inviteData }),
       });
 
-      if (!saveRes.ok) {
-        const errText = await saveRes.text();
-        let errorMessage = "Failed to publish invitation";
-        try {
-          const errorData = JSON.parse(errText);
-          errorMessage = errorData.error || errorMessage;
-        } catch {
-          errorMessage = errText || errorMessage;
-        }
-
-        if (errorMessage === "paymentRequired" || saveRes.status === 402) {
-          setShowPricingModal(true);
-          return;
-        }
-
-        throw new Error(errorMessage);
-      }
+      if (!saveRes.ok) throw new Error("Failed to publish");
 
       setPublishedInviteId(id);
       setSaveSuccess(true);
       setHasUnpublishedChanges(false);
-      setFormData((prev) => ({ ...prev, ...inviteData }));
-      loadedDataRef.current = JSON.stringify({
-        brideName: inviteData.brideName,
-        groomName: inviteData.groomName,
-        weddingDate: inviteData.weddingDate,
-        location: inviteData.location,
-        venueAddress: inviteData.venueAddress,
-        venueCity: inviteData.venueCity,
-        googleMapsLink: inviteData.googleMapsLink,
-        coordinates: inviteData.coordinates,
-        story: inviteData.story,
-        events: inviteData.events,
-        galleryImages: inviteData.galleryImages,
-        template: inviteData.template,
-        muhurtham: inviteData.muhurtham,
-        deity: inviteData.deity,
-        family: inviteData.family,
-        eventName: inviteData.eventName,
-        enable3D: inviteData.enable3D,
-        enableEnvelope: inviteData.enableEnvelope,
-      });
-
+      setFormData(prev => ({ ...prev, ...inviteData }));
+      
       if (forceSaveAfterPayment) {
         setShowFinalSuccessModal(true);
-        toast.success("🎉 Your Story is Live!");
       } else {
-        toast.success("🎉 Changes published successfully!");
-        setTimeout(() => {
-          navigate(`/invitation/${id}`);
-        }, 1500);
+        toast.success("🎉 Published successfully!");
+        setShowShareModal(true);
       }
     } catch (error: any) {
-      if (error.message !== "paymentRequired") {
-        console.error("Publish error:", error);
-        toast.error(error.message || "An error occurred during publish.");
-      } else {
-        setShowPricingModal(true);
-      }
+      console.error("Publish error:", error);
+      toast.error(error.message || "Publish failed");
     } finally {
       setIsSaving(false);
-      setIsCheckingPayment(false);
     }
   };
 
@@ -1370,31 +1239,32 @@ export default function Builder() {
                 <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1" />
                 Galleries
               </button>
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-purple-600 rounded-2xl shadow-lg shadow-purple-200">
-                  <Sparkles className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-serif italic text-gray-900 leading-tight">Design Studio</h1>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    {isTemplateDisabled ? (
-                      <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-                        <p className="text-[9px] uppercase font-bold tracking-widest text-red-500">
-                          Currently Unavailable
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                        <p className="text-[9px] uppercase font-bold tracking-widest text-gray-400">
-                          Syncing Real-time
-                        </p>
-                      </>
-                    )}
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-purple-600 rounded-2xl shadow-lg shadow-purple-200">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h1 className="text-xl font-serif italic text-gray-900 leading-tight">Design Studio</h1>
+                    <div className="flex items-center gap-2 mt-1">
+                      {formData.status === "live" && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-green-50 text-[9px] font-bold text-green-600 uppercase tracking-tighter border border-green-100 rounded-full">
+                          <span className="w-1 h-1 rounded-full bg-green-500 animate-pulse" />
+                          Live
+                        </span>
+                      )}
+                      {hasUnpublishedChanges && (
+                        <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-[9px] font-bold text-amber-600 uppercase tracking-tighter border border-amber-100 rounded-full">
+                          Changes Pending
+                        </span>
+                      )}
+                      {!formData.status && (
+                        <span className="text-[9px] uppercase font-bold tracking-widest text-gray-400">
+                          Draft Mode
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
             </div>
 
             {/* CMS Sections */}
@@ -1566,14 +1436,36 @@ export default function Builder() {
                    {isSavingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                    Save
                  </button>
-                 <button
-                   onClick={() => handleSave()}
-                   disabled={isSaving || isCheckingPayment}
-                   className="flex-[2] py-3 px-4 rounded-xl bg-purple-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 flex items-center justify-center gap-2"
-                 >
-                   {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
-                   Publish Live
-                 </button>
+                 
+                 {formData.status === 'live' ? (
+                    hasUnpublishedChanges ? (
+                      <button
+                        onClick={() => setShowRedeployModal(true)}
+                        disabled={isSaving || isCheckingPayment}
+                        className="flex-[2] py-3 px-4 rounded-xl bg-editorial-ink text-white text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg flex items-center justify-center gap-2"
+                      >
+                        {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5 text-editorial-accent" />}
+                        Redeploy (₹99)
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="flex-[2] py-3 px-4 rounded-xl bg-green-50 text-green-600 border border-green-200 text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 cursor-default"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Live
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      onClick={() => handleSave()}
+                      disabled={isSaving || isCheckingPayment}
+                      className="flex-[2] py-3 px-4 rounded-xl bg-purple-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 flex items-center justify-center gap-2"
+                    >
+                      {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                      Publish Live
+                    </button>
+                  )}
                </div>
             </div>
           </motion.aside>
@@ -1636,14 +1528,35 @@ export default function Builder() {
                
                <div className="h-6 w-px bg-gray-200" />
 
-               <button
-                  onClick={() => handleSave()}
-                  disabled={isSaving || isCheckingPayment}
-                  className="bg-purple-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-                  Publish Changes
-                </button>
+               {formData.status === 'live' ? (
+                  hasUnpublishedChanges ? (
+                    <button
+                      onClick={() => setShowRedeployModal(true)}
+                      disabled={isSaving || isCheckingPayment}
+                      className="bg-editorial-ink text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-black transition-all shadow-lg disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4 text-editorial-accent" />}
+                      Redeploy
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      className="bg-green-50 text-green-600 px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border border-green-200 flex items-center gap-2 cursor-default"
+                    >
+                      <Check className="w-4 h-4" />
+                      Website Live
+                    </button>
+                  )
+               ) : (
+                <button
+                   onClick={() => handleSave()}
+                   disabled={isSaving || isCheckingPayment}
+                   className="bg-purple-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 disabled:opacity-50 flex items-center gap-2"
+                 >
+                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                   Publish Now
+                 </button>
+               )}
             </div>
           </div>
         </header>

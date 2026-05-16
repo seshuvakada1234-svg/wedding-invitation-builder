@@ -12,50 +12,27 @@
     },
     "invite": {
       "title": "Wedding Invite",
-      "description": "Details for a wedding invitation website",
+      "description": "Details for a wedding invitation website with draft/publish separation",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "slug": { "type": "string" },
+        "id": { "type": "string" },
+        "templateId": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "live"] },
+        "published": { "type": "boolean" },
+        "hasUnpublishedChanges": { "type": "boolean" },
+        "viewsUsed": { "type": "number" },
+        "viewsLimit": { "type": "number" },
+        "draftData": { "type": "object" },
+        "publishedData": { "type": "object" },
+        "templateDrafts": { "type": "object" },
         "brideName": { "type": "string" },
         "groomName": { "type": "string" },
         "weddingDate": { "type": "string" },
         "location": { "type": "string" },
-        "template": { "type": "string", "enum": ["royal-wedding", "konaseema", "kerala-wedding", "kerala-envelope-reveal", "housewarming-south"] },
-        "isPaid": { "type": "boolean" },
-        "views": { "type": "number" },
-        "viewLimit": { "type": "number" },
-        "coverImage": { "type": "string" },
-        "coverImageKey": { "type": "string" },
-        "galleryImages": { "type": "array", "items": { "type": "string" } },
-        "galleryImageKeys": { "type": "array", "items": { "type": "string" } },
-        "events": { 
-          "type": "array", 
-          "items": { 
-            "type": "object",
-            "properties": {
-              "name": { "type": "string" },
-              "date": { "type": "string" },
-              "time": { "type": "string" },
-              "location": { "type": "string" }
-            }
-          }
-        },
-        "googleMapsLink": { "type": "string" },
-        "coordinates": { "type": "string" },
-        "venueAddress": { "type": "string" },
-        "venueCity": { "type": "string" },
-        "muhurtham": { "type": "string" },
-        "deity": { "type": "string" },
-        "family": { "type": "string" },
-        "enable3D": { "type": "boolean" },
-        "enableEnvelope": { "type": "boolean" },
-        "eventName": { "type": "string" },
-        "story": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["userId", "slug", "brideName", "groomName", "weddingDate", "template"]
+        "updatedAt": { "type": "string" },
+        "publishedAt": { "type": "string" }
+      }
     }
   },
   "firestore": {
