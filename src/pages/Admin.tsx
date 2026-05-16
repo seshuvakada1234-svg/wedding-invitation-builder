@@ -34,15 +34,6 @@ interface Stats {
   activeWebsites: number;
 }
 
-const TEMPLATES = [
-  { id: "royal-wedding",          label: "Indian Royal Wedding" },
-  { id: "konaseema",              label: "Konaseema Heritage" },
-  { id: "kerala-wedding",         label: "Kerala Wedding" },
-  { id: "kerala-envelope-reveal", label: "Kerala Envelope Reveal" },
-  { id: "housewarming-south",     label: "South Indian Housewarming" },
-  { id: "all_access",             label: "All Access Pass" },
-];
-
 // ✅ Smart date formatter
 function formatDate(val: any): string {
   if (!val) return "—";
@@ -79,19 +70,44 @@ export default function Admin() {
     activeWebsites: 0,
   });
 
+  const [dbTemplates, setDbTemplates] = useState<any[]>([]);
+  const [dbPrices, setDbPrices] = useState<Record<string, number>>({});
   const [prices, setPrices]   = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving]   = useState<string | null>(null);
 
   const unsubs = useRef<(() => void)[]>([]);
 
-  async function loadPrices() {
+  async function syncTemplates() {
     try {
       const { templates: staticTemplates } = await import("../templates");
+      for (const t of staticTemplates) {
+        const tRef = doc(db, "templates", t.id);
+        const snap = await getDoc(tRef);
+        if (!snap.exists()) {
+          await setDoc(tRef, {
+            id: t.id,
+            name: t.name,
+            publishPrice: 999, // Standard default price if not already in DB
+            category: t.category || 'classic',
+            enabled: true,
+            activeUses: 0,
+            thumbnail: t.thumbnail,
+            createdAt: new Date()
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Sync templates error:", e);
+    }
+  }
+
+  async function loadPrices() {
+    try {
+      await syncTemplates();
+      const { templates: staticTemplates } = await import("../templates");
       const defaults: Record<string, string> = {};
-      staticTemplates.forEach((t) => { 
-        defaults[t.id] = t.price.toString(); 
-      });
+      // No longer using static prices as defaults
 
       const promises = staticTemplates.map(t => getDoc(doc(db, "templates", t.id)));
       const snaps = await Promise.all(promises);
@@ -199,6 +215,20 @@ export default function Admin() {
           }));
         }, (err) => console.error("Payments listener error:", err));
         unsubs.current.push(u3);
+
+        // 4. Templates Listener
+        const ut = onSnapshot(collection(db, "templates"), (snap) => {
+          const tList = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          setDbTemplates(tList);
+          
+          // Sync prices state with dynamic data
+          const newPrices: Record<string, string> = {};
+          tList.forEach(t => {
+            if (t.publishPrice) newPrices[t.id] = t.publishPrice.toString();
+          });
+          setPrices(prev => ({ ...prev, ...newPrices }));
+        }, (err) => console.error("Templates listener error:", err));
+        unsubs.current.push(ut);
 
       } else {
         setLoading(false);
@@ -499,6 +529,7 @@ export default function Admin() {
           {tab === "templates" && (
             <TemplatesManager 
               invites={invites} 
+              dbTemplates={dbTemplates}
               prices={prices}
               setPrices={setPrices}
               editing={editing}
@@ -614,6 +645,7 @@ function InviteTable({
 /* ── Templates Manager with Price Editor ── */
 function TemplatesManager({ 
   invites,
+  dbTemplates,
   prices,
   setPrices,
   editing,
@@ -622,6 +654,7 @@ function TemplatesManager({
   onSavePrice
 }: { 
   invites: WeddingInvite[];
+  dbTemplates: any[];
   prices: Record<string, string>;
   setPrices: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   editing: string | null;
@@ -635,7 +668,13 @@ function TemplatesManager({
         Set publish price per template. Saved to Firestore — applies immediately at checkout.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {TEMPLATES.map((tmpl) => {
+        {dbTemplates.length === 0 && (
+          <div className="col-span-full py-20 text-center editorial-card bg-white border-dashed border-2">
+            <Layout className="w-12 h-12 text-editorial-muted mx-auto mb-4 opacity-20" />
+            <p className="text-editorial-muted font-serif italic text-lg">No templates available yet.</p>
+          </div>
+        )}
+        {dbTemplates.map((tmpl) => {
           const count     = invites.filter((i) => i.template === tmpl.id).length;
           const isEditing = editing === tmpl.id;
           const isSaving  = saving  === tmpl.id;
@@ -644,12 +683,18 @@ function TemplatesManager({
             <div key={tmpl.id} className="editorial-card bg-white p-6 hover:shadow-xl transition-all duration-300">
               <div className="flex items-center justify-between mb-6">
                 <span className="text-xs font-bold uppercase tracking-widest text-editorial-muted">
-                  {tmpl.label}
+                  {tmpl.name || tmpl.id}
                 </span>
                 <div className="p-2 rounded-full bg-editorial-bg">
                   <Layout className="w-4 h-4 text-editorial-accent" />
                 </div>
               </div>
+
+              {tmpl.thumbnail && (
+                <div className="mb-6 h-32 rounded-xl overflow-hidden bg-editorial-bg border border-editorial-border/30">
+                  <img src={tmpl.thumbnail} alt={tmpl.name} className="w-full h-full object-cover" />
+                </div>
+              )}
 
               <div className="flex items-baseline gap-2 mb-6">
                 <p className="text-4xl font-serif italic">{count}</p>
@@ -668,7 +713,7 @@ function TemplatesManager({
                     <input
                       type="number"
                       min="0"
-                      value={prices[tmpl.id] ?? "499"}
+                      value={prices[tmpl.id] ?? tmpl.publishPrice ?? "499"}
                       onChange={(e) =>
                         setPrices((prev) => ({ ...prev, [tmpl.id]: e.target.value }))
                       }
@@ -678,7 +723,7 @@ function TemplatesManager({
                   </div>
                 ) : (
                   <p className="text-3xl font-serif italic text-editorial-accent">
-                    ₹{prices[tmpl.id] ?? "499"}
+                    ₹{prices[tmpl.id] ?? tmpl.publishPrice ?? "499"}
                   </p>
                 )}
               </div>
@@ -708,8 +753,12 @@ function TemplatesManager({
                     >
                       Edit Price
                     </button>
-                    <button className="flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest border border-red-100 text-red-200 rounded cursor-not-allowed">
-                      Disable
+                    <button className={`flex-1 py-2.5 text-[10px] font-bold uppercase tracking-widest border rounded transition-all ${
+                      tmpl.enabled !== false 
+                        ? "border-green-100 text-green-600 hover:bg-green-50" 
+                        : "border-red-100 text-red-600 hover:bg-red-50"
+                    }`}>
+                      {tmpl.enabled !== false ? "Enabled" : "Disabled"}
                     </button>
                   </>
                 )}

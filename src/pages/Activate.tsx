@@ -3,11 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { CheckCircle2, CreditCard, ExternalLink, ShieldCheck, ArrowRight, Share2, Eye, Sparkles, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
-import { handleFirestoreError } from "../lib/firebase";
+import { db, handleFirestoreError } from "../lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 import toast from "react-hot-toast";
 
 export default function Preview() {
@@ -15,7 +16,18 @@ export default function Preview() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isPaying, setIsPaying] = useState(false);
+  const [dbPrice, setDbPrice] = useState<number | null>(null);
   const invite = location.state?.invite;
+
+  useEffect(() => {
+    if (!invite?.template) return;
+    const unsub = onSnapshot(doc(db, "templates", invite.template), (snap) => {
+      if (snap.exists() && snap.data().publishPrice) {
+        setDbPrice(Number(snap.data().publishPrice));
+      }
+    });
+    return () => unsub();
+  }, [invite?.template]);
 
   const handlePayment = async () => {
     if (!slug) return;
@@ -60,7 +72,7 @@ export default function Preview() {
                         <h3 className="font-serif italic text-xl">The Prime Plan</h3>
                         <p className="text-[10px] uppercase font-bold tracking-widest text-editorial-muted">Lifetime Access</p>
                     </div>
-                    <span className="text-2xl font-serif text-editorial-accent">₹999</span>
+                    <span className="text-2xl font-serif text-editorial-accent">{dbPrice ? `₹${dbPrice}` : "..."}</span>
                 </div>
                 <ul className="space-y-2 mb-6">
                     <li className="flex items-center gap-2 text-sm text-editorial-secondary">

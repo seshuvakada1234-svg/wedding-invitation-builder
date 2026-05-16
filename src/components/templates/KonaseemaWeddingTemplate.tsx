@@ -5,13 +5,12 @@
 
 "use client";
 
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, { useRef } from "react";
 import {
   motion,
   useScroll,
   useTransform,
   useInView,
-  AnimatePresence,
 } from "motion/react";
 import CountdownTimer from "../CountdownTimer";
 import MapPreview from "../MapPreview";
@@ -19,162 +18,21 @@ import TemplateImage from "../TemplateImage";
 
 /* ═══════════════════════════ SVG DECORATIONS ═══════════════════════════ */
 
-function MangoLeaf({ className = "", color = "#2E7D32", size = 20 }) {
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size * 1.8}
-      viewBox="0 0 20 36"
-      fill="none"
-    >
-      <path
-        d="M10 0C10 0 18 8 18 18C18 28 10 36 10 36C10 36 2 28 2 18C2 8 10 0 10 0Z"
-        fill={color}
-      />
-      <line x1="10" y1="2" x2="10" y2="34" stroke={color} strokeWidth="0.6" opacity="0.4" />
-      <line x1="10" y1="10" x2="6" y2="8" stroke={color} strokeWidth="0.3" opacity="0.25" />
-      <line x1="10" y1="10" x2="14" y2="8" stroke={color} strokeWidth="0.3" opacity="0.25" />
-      <line x1="10" y1="16" x2="5" y2="14" stroke={color} strokeWidth="0.3" opacity="0.25" />
-      <line x1="10" y1="16" x2="15" y2="14" stroke={color} strokeWidth="0.3" opacity="0.25" />
-      <line x1="10" y1="22" x2="6" y2="20" stroke={color} strokeWidth="0.3" opacity="0.25" />
-      <line x1="10" y1="22" x2="14" y2="20" stroke={color} strokeWidth="0.3" opacity="0.25" />
-    </svg>
-  );
-}
-
-function BananaLeafDecor({ className = "", color = "#2E7D32", size = 60 }) {
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size * 0.55}
-      viewBox="0 0 60 33"
-      fill="none"
-    >
-      <path
-        d="M0 33Q5 18 10 10Q15 2 30 0Q45 2 50 10Q55 18 60 33"
-        fill={color}
-        opacity="0.12"
-      />
-      <line x1="30" y1="2" x2="30" y2="31" stroke={color} strokeWidth="0.5" opacity="0.25" />
-      <line x1="30" y1="8" x2="18" y2="14" stroke={color} strokeWidth="0.3" opacity="0.18" />
-      <line x1="30" y1="8" x2="42" y2="14" stroke={color} strokeWidth="0.3" opacity="0.18" />
-      <line x1="30" y1="16" x2="14" y2="22" stroke={color} strokeWidth="0.3" opacity="0.18" />
-      <line x1="30" y1="16" x2="46" y2="22" stroke={color} strokeWidth="0.3" opacity="0.18" />
-      <line x1="30" y1="24" x2="20" y2="29" stroke={color} strokeWidth="0.3" opacity="0.18" />
-      <line x1="30" y1="24" x2="40" y2="29" stroke={color} strokeWidth="0.3" opacity="0.18" />
-    </svg>
-  );
-}
-
-function CoconutTreeSVG({ className = "", color = "#1B5E20", height = 180 }) {
-  return (
-    <svg
-      className={className}
-      width={height * 0.5}
-      height={height}
-      viewBox="0 0 90 180"
-      fill="none"
-    >
-      <path
-        d="M44 180C42 150 48 120 46 85C44 55 50 35 45 12"
-        stroke={color}
-        strokeWidth="5"
-        fill="none"
-        strokeLinecap="round"
-      />
-      <path d="M45 18C28 8 8 22 2 12" stroke={color} strokeWidth="2.5" fill="none" />
-      <path d="M45 18C62 8 82 22 88 12" stroke={color} strokeWidth="2.5" fill="none" />
-      <path d="M45 18C32 4 12 0 0 6" stroke={color} strokeWidth="2" fill="none" />
-      <path d="M45 18C58 4 78 0 90 6" stroke={color} strokeWidth="2" fill="none" />
-      <path d="M45 18C36 12 18 28 8 33" stroke={color} strokeWidth="1.8" fill="none" />
-      <path d="M45 18C54 12 72 28 82 33" stroke={color} strokeWidth="1.8" fill="none" />
-      <path d="M45 18C45 10 40 2 35 0" stroke={color} strokeWidth="2" fill="none" />
-      <path d="M45 18C45 10 50 2 55 0" stroke={color} strokeWidth="2" fill="none" />
-      <circle cx="40" cy="24" r="3.5" fill={color} />
-      <circle cx="50" cy="21" r="3" fill={color} />
-      <circle cx="45" cy="27" r="2.8" fill={color} />
-    </svg>
-  );
-}
-
-function DiyaSVG({ className = "", size = 50, glow = false }) {
-  const fid = useMemo(
-    () => `dg-${Math.random().toString(36).slice(2, 8)}`,
-    []
-  );
-  return (
-    <svg className={className} width={size} height={size} viewBox="0 0 50 60" fill="none">
-      {glow && (
-        <defs>
-          <filter id={fid} x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" />
-          </filter>
-        </defs>
-      )}
-      <ellipse cx="25" cy="52" rx="14" ry="4" fill="#8B6914" opacity="0.8" />
-      <path d="M15 48C15 40 35 40 35 48" fill="#C9A84C" opacity="0.9" />
-      <ellipse cx="25" cy="42" rx="8" ry="3" fill="#FFB300" opacity="0.5" />
-      <line x1="25" y1="42" x2="25" y2="36" stroke="#5D4037" strokeWidth="1" />
-      <path d="M25 36C22 30 20 22 25 14C30 22 28 30 25 36Z" fill="#FF8F00" opacity="0.85" />
-      <path d="M25 36C23 32 22 26 25 20C28 26 27 32 25 36Z" fill="#FFC107" />
-      {glow && (
-        <circle cx="25" cy="28" r="14" fill="#FFC107" opacity="0.12" filter={`url(#${fid})`} />
-      )}
-    </svg>
-  );
-}
-
-function LeafCorner({ className = "", color = "#2E7D32", flip = false }) {
-  return (
-    <svg
-      className={className}
-      width="50"
-      height="50"
-      viewBox="0 0 50 50"
-      fill="none"
-      style={flip ? { transform: "scaleX(-1)" } : {}}
-    >
-      <path
-        d="M5 5C5 5 5 20 15 30C22 37 40 38 48 48"
-        stroke={color}
-        strokeWidth="1"
-        opacity="0.35"
-      />
-      <path
-        d="M5 5C5 5 15 5 22 12C28 18 30 35 48 48"
-        stroke={color}
-        strokeWidth="0.7"
-        opacity="0.25"
-      />
-      <path d="M8 8C8 8 12 5 16 10C13 13 8 12 8 8Z" fill={color} opacity="0.2" />
-      <circle cx="5" cy="5" r="2" fill={color} opacity="0.35" />
-    </svg>
-  );
-}
-
 function RangoliSVG({
   className = "",
   color = "#FBC02D",
   size = 120,
   animate = false,
 }) {
-  const Comp = (animate ? motion.svg : "svg") as any;
-  const ap = animate
-    ? {
-        animate: { rotate: 360 },
-        transition: { duration: 90, repeat: Infinity, ease: "linear" },
-      }
-    : {};
   return (
-    <Comp
+    <motion.svg
       className={className}
       width={size}
       height={size}
       viewBox="0 0 120 120"
       fill="none"
-      {...ap}
+      animate={animate ? { rotate: 360 } : undefined}
+      transition={animate ? { duration: 90, repeat: Infinity, ease: "linear" } : undefined}
     >
       {Array.from({ length: 12 }).map((_, i) => (
         <ellipse
@@ -216,115 +74,11 @@ function RangoliSVG({
           />
         );
       })}
-    </Comp>
-  );
-}
-
-function ToranSVG({ className = "" }) {
-  const leafPairs = useMemo(
-    () =>
-      Array.from({ length: 11 }).map((_, i) => {
-        const x = 45 + i * 85;
-        const la = -12 - (i % 3) * 5;
-        const ra = 12 + (i % 3) * 5;
-        const lo = 0.65 + (i % 2) * 0.15;
-        return { x, la, ra, lo };
-      }),
-    []
-  );
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 980 85"
-      fill="none"
-      preserveAspectRatio="none"
-    >
-      <path
-        d="M20 16Q245 30 490 16Q735 2 960 20"
-        stroke="#8B6914"
-        strokeWidth="2.5"
-        fill="none"
-      />
-      <path
-        d="M20 16Q245 30 490 16Q735 2 960 20"
-        stroke="#A07D28"
-        strokeWidth="1"
-        fill="none"
-        opacity="0.4"
-      />
-      {leafPairs.map((l, i) => (
-        <g key={i}>
-          <ellipse
-            cx={l.x - 8}
-            cy="46"
-            rx="5.5"
-            ry="24"
-            fill="#4CAF50"
-            opacity={l.lo}
-            transform={`rotate(${l.la} ${l.x - 8} 18)`}
-          />
-          <ellipse
-            cx={l.x + 8}
-            cy="46"
-            rx="5.5"
-            ry="24"
-            fill="#66BB6A"
-            opacity={l.lo - 0.1}
-            transform={`rotate(${l.ra} ${l.x + 8} 18)`}
-          />
-          <circle cx={l.x} cy="14" r="4.5" fill="#FBC02D" opacity="0.65" />
-          <circle cx={l.x} cy="14" r="2.2" fill="#FF8F00" opacity="0.45" />
-        </g>
-      ))}
-    </svg>
+    </motion.svg>
   );
 }
 
 /* ═══════════════════════════ ANIMATIONS ═══════════════════════════ */
-
-function FloatingLeaves() {
-  const leaves = useMemo(
-    () =>
-      Array.from({ length: 16 }).map((_, i) => ({
-        id: i,
-        left: Math.random() * 100,
-        delay: Math.random() * 12,
-        duration: 13 + Math.random() * 9,
-        size: 10 + Math.random() * 14,
-        rotation: Math.random() * 360,
-        rotSpeed: (Math.random() - 0.5) * 140,
-        sway: 22 + Math.random() * 45,
-        opacity: 0.18 + Math.random() * 0.28,
-        shade: ["#2E7D32", "#388E3C", "#43A047", "#4CAF50"][i % 4],
-      })),
-    []
-  );
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none z-10">
-      {leaves.map((l) => (
-        <motion.div
-          key={l.id}
-          className="absolute"
-          style={{ left: `${l.left}%`, top: -25 }}
-          animate={{
-            y: ["0vh", "108vh"],
-            x: [0, l.sway, -l.sway * 0.6, l.sway * 0.25],
-            rotate: [l.rotation, l.rotation + l.rotSpeed * 2],
-            opacity: [0, l.opacity, l.opacity, 0],
-          }}
-          transition={{
-            duration: l.duration,
-            delay: l.delay,
-            repeat: Infinity,
-            ease: "linear",
-          }}
-        >
-          <MangoLeaf color={l.shade} size={l.size} />
-        </motion.div>
-      ))}
-    </div>
-  );
-}
 
 function SunlightRays() {
   return (
@@ -361,28 +115,6 @@ function SunlightRays() {
 }
 
 /* ═══════════════════════════ HELPERS ═══════════════════════════ */
-
-function LeafPatternBG({ className = "", opacity = 0.025 }) {
-  return (
-    <div
-      className={`absolute inset-0 overflow-hidden pointer-events-none ${className}`}
-      style={{
-        backgroundImage: `url("data:image/svg+xml,%3Csvg width='44' height='44' viewBox='0 0 44 44' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M22 3C22 3 28 9 28 16C28 23 22 29 22 29C22 29 16 23 16 16C16 9 22 3 22 3Z' fill='%232E7D32' fill-opacity='${opacity}'/%3E%3C/svg%3E")`,
-        backgroundSize: "44px 44px",
-      }}
-    />
-  );
-}
-
-function LeafDivider({ className = "" }) {
-  return (
-    <div className={`flex items-center justify-center gap-3 ${className}`}>
-      <div className="h-px w-14 md:w-20 bg-gradient-to-r from-transparent to-[#2E7D32]/35" />
-      <MangoLeaf color="#2E7D32" size={13} />
-      <div className="h-px w-14 md:w-20 bg-gradient-to-l from-transparent to-[#2E7D32]/35" />
-    </div>
-  );
-}
 
 function SectionReveal({ children, className = "", delay = 0 }: { children: React.ReactNode, className?: string, delay?: number, key?: any }) {
   const ref = useRef(null);
@@ -441,8 +173,6 @@ export default function KonaseemaWeddingTemplate({
 }: KonaseemaWeddingTemplateProps) {
   const heroRef = useRef(null);
   const galleryRef = useRef<HTMLDivElement>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(true);
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -451,18 +181,11 @@ export default function KonaseemaWeddingTemplate({
   const heroScale = useTransform(scrollYProgress, [0, 1], [1, 1.08]);
   const heroOpacity = useTransform(scrollYProgress, [0, 0.55], [1, 0.3]);
 
-  const checkScroll = () => {
-    if (!galleryRef.current) return;
-    const { scrollLeft, scrollWidth, clientWidth } = galleryRef.current;
-    setCanScrollLeft(scrollLeft > 5);
-    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5);
-  };
-
-  useEffect(() => {
-    checkScroll();
-    window.addEventListener("resize", checkScroll);
-    return () => window.removeEventListener("resize", checkScroll);
-  }, []);
+  // Parse date for Calendar Visual
+  const dateParts = date.match(/(\d{1,2})\s+(\w+)\s+(\d{4})/);
+  const day = dateParts ? dateParts[1] : "";
+  const month = dateParts ? dateParts[2].toUpperCase() : "";
+  const year = dateParts ? dateParts[3] : "";
 
   const defaultGallery = [
     "https://picsum.photos/seed/konaseema-g2/600/750.jpg",
@@ -476,10 +199,8 @@ export default function KonaseemaWeddingTemplate({
 
   return (
     <div className="min-h-screen bg-[#F0F2F0] overflow-x-hidden">
-      {/* Container - Centered and constrained for Desktop */}
+      {/* Container */}
       <div className="w-full max-w-[420px] md:max-w-5xl lg:max-w-6xl mx-auto bg-white shadow-sm md:shadow-2xl relative min-h-screen overflow-hidden">
-        
-        {enable3D && <FloatingLeaves />}
 
         {/* ═══════════ HERO ═══════════ */}
         <section ref={heroRef} className="relative h-[65vh] md:h-[75vh] lg:h-[80vh] flex items-center justify-center overflow-hidden">
@@ -493,20 +214,11 @@ export default function KonaseemaWeddingTemplate({
             />
           </motion.div>
 
-          <SunlightRays />
+          {enable3D && <SunlightRays />}
           <motion.div
             className="absolute inset-0 bg-gradient-to-b from-[#1B5E20]/30 via-transparent to-white pointer-events-none"
             style={{ opacity: heroOpacity }}
           />
-
-          <motion.div
-            className="absolute top-0 left-0 right-0 z-20"
-            initial={{ y: -90, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ duration: 1.4 }}
-          >
-            <ToranSVG className="w-full h-auto drop-shadow-sm opacity-80" />
-          </motion.div>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-6 pt-12 text-center pointer-events-none">
             <motion.p
@@ -535,10 +247,34 @@ export default function KonaseemaWeddingTemplate({
               transition={{ delay: 1.2 }}
               className="mt-6 md:mt-10"
             >
-              <LeafDivider className="mb-4 md:w-48 md:h-8" />
+              <div className="w-16 md:w-24 h-px bg-[#FBC02D]/60 mx-auto mb-4" />
               <p className="text-[#FBC02D] text-xs md:text-xl font-serif tracking-[0.2em]">{date}</p>
             </motion.div>
           </div>
+        </section>
+
+        {/* ═══════════ SAVE THE DATE ═══════════ */}
+        <section className="py-16 md:py-24 bg-[#F9FAF9] text-center">
+          <SectionReveal className="max-w-lg mx-auto px-6">
+            <h2 className="text-sm md:text-lg tracking-[0.3em] uppercase text-[#5D4037]/70 mb-10 font-sans">Save the Date</h2>
+            
+            <div className="relative inline-block bg-white border border-[#FBC02D]/20 shadow-xl rounded-2xl p-8 md:p-10">
+              {/* Heart Icon */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 md:w-16 md:h-16 bg-[#FBC02D] rounded-full flex items-center justify-center shadow-lg border-4 border-[#F9FAF9]">
+                <span className="text-white text-2xl md:text-3xl">♥</span>
+              </div>
+              
+              <div className="mt-4">
+                <p className="text-sm md:text-base text-[#5D4037] tracking-[0.2em] font-sans">{month}</p>
+                <p className="text-7xl md:text-9xl font-serif text-[#1B5E20] my-2 leading-none">{day}</p>
+                <p className="text-sm md:text-base text-[#5D4037] tracking-[0.2em] font-sans">{year}</p>
+              </div>
+              
+              <div className="w-12 h-px bg-[#FBC02D] mx-auto my-6 opacity-50" />
+              
+              <p className="text-xs md:text-sm text-[#5D4037]/60 font-serif italic px-4">{venue}</p>
+            </div>
+          </SectionReveal>
         </section>
 
         {/* ═══════════ COUNTDOWN ═══════════ */}
@@ -546,14 +282,15 @@ export default function KonaseemaWeddingTemplate({
           <CountdownTimer targetDate={date} theme="traditional" />
         </section>
 
-        {/* ═══════════ INVITATION ═══════════ */}
+        {/* ═══════════ OUR STORY ═══════════ */}
         <section className="px-6 md:px-12 py-16 md:py-20 lg:py-24 text-center bg-white">
           <SectionReveal className="max-w-3xl mx-auto">
-            <BananaLeafDecor color="#2E7D32" size={60} className="mx-auto mb-6 opacity-30 md:w-24 md:h-24" />
-            <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20] mb-3 md:mb-6">Our Auspicious Beginning</h2>
+            <div className="w-8 md:w-16 h-px bg-[#FBC02D] mx-auto mb-6 opacity-50" />
+            <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20] mb-6 md:mb-8">Our Story</h2>
             <p className="text-[13px] md:text-lg text-[#5D4037]/70 leading-relaxed max-w-2xl mx-auto">
               {story}
             </p>
+            <div className="w-8 md:w-16 h-px bg-[#FBC02D] mx-auto mt-6 opacity-50" />
           </SectionReveal>
         </section>
 
@@ -565,7 +302,7 @@ export default function KonaseemaWeddingTemplate({
           </SectionReveal>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 px-4 md:px-8 pb-4">
-            {events?.map((ev, i) => (
+            {events?.map((ev: any, i: number) => (
               <motion.div
                 key={i}
                 className="w-full min-h-[200px] md:min-h-[280px] rounded-2xl p-6 md:p-8 bg-white border border-[#2E7D32]/10 shadow-md flex flex-col items-center text-center justify-center relative overflow-hidden"
@@ -574,7 +311,7 @@ export default function KonaseemaWeddingTemplate({
                 transition={{ duration: 0.5, delay: i * 0.1 }}
                 viewport={{ once: true }}
               >
-                <MangoLeaf className="mx-auto mb-4 opacity-20" size={12} />
+                <div className="w-6 h-px bg-[#FBC02D] mb-4 opacity-40" />
                 <div className="w-full aspect-[16/10] rounded-xl overflow-hidden mb-6 shadow-sm">
                   <TemplateImage
                     image={ev.image}
@@ -600,8 +337,8 @@ export default function KonaseemaWeddingTemplate({
             Moments Captured
           </SectionReveal>
 
-            <div ref={galleryRef} onScroll={checkScroll}
-                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-6 md:px-12 pb-2">
+          <div ref={galleryRef}
+               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-6 md:px-12 pb-2">
             {displayGallery.map((src, i) => (
               <div key={i} className={`w-full aspect-[4/5] rounded-xl overflow-hidden shadow-md ${i === 0 ? 'col-span-1 sm:col-span-2' : ''}`}>
                 <TemplateImage 

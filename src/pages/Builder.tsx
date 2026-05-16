@@ -38,16 +38,33 @@ import {
   Move,
   RefreshCcw,
   ZoomIn as ZoomIcon,
+  ChevronDown,
+  Palette,
+  Crown,
+  Gem
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { WeddingInvite, TemplateType, WeddingEvent, EditableImage, TemplateDraft } from "../types";
 import { auth, authFetch, db, handleFirestoreError, loginAnonymously } from "../lib/firebase";
 import { getTemplateById } from "../templates";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, collection } from "firebase/firestore";
 import toast from "react-hot-toast";
 import ImageEditorModal from "../components/ImageEditorModal";
 import ImageItem from "../components/ImageItem";
+
+import { useEditorStore } from "../store/useEditorStore";
+import * as Accordion from "@radix-ui/react-accordion";
+import * as Tabs from "@radix-ui/react-tabs";
+import { CoupleIdentity } from "../components/editor/CoupleIdentity";
+import { HeroEditor } from "../components/editor/HeroEditor";
+import { ThemeCustomizer } from "../components/editor/ThemeCustomizer";
+import { EventBuilder } from "../components/editor/EventBuilder";
+import { GalleryManager } from "../components/editor/GalleryManager";
+import { MusicSettings } from "../components/editor/MusicSettings";
+import { RSVPContact } from "../components/editor/RSVPContact";
+import { CountdownSettings } from "../components/editor/CountdownSettings";
+import { SEOSettings } from "../components/editor/SEOSettings";
 
 import { calculateFreeViews } from "../lib/pricing";
 
@@ -84,36 +101,59 @@ export default function Builder() {
   const initialTemplate = (templateId || searchParams.get("template") || "royal-wedding") as TemplateType;
   const [isEditMode, setIsEditMode] = useState(!!inviteId);
 
-  const [formData, setFormData] = useState<Partial<WeddingInvite>>({
-    brideName: "Elena Sofia",
-    groomName: "Marcus James",
-    weddingDate: "September 24, 2024",
-    location: "Villa d'Este, Lake Como",
-    venueAddress: "",
-    venueCity: "",
-    googleMapsLink: "",
-    story: "",
-    deity: "Lord Venkateswara",
-    eventName: "Gruha Pravesh",
-    muhurtham: "2:43 AM",
-    family: "Chodapaneedi Family",
-    enable3D: true,
-    enableEnvelope: true,
-    template: initialTemplate,
-    templateDrafts: {},
-    galleryImages: GALLERY_DEFAULTS[initialTemplate] || GALLERY_DEFAULTS["default"],
-    events: (TEMPLATE_DEFAULTS[initialTemplate] || ["Wedding"]).map((name) => ({
-      name,
-      date: "TBD",
-      time: "TBD",
-      location: "TBD",
-      image: "",
-    })),
-    viewLimit: 500,
-    views: 0,
-    isPaid: false,
-    published: false,
-  });
+  const { formData, setFormData } = useEditorStore();
+
+  useEffect(() => {
+    // Set initial defaults if store is empty
+    if (!formData.brideName) {
+      setFormData({
+        brideName: "Elena Sofia",
+        groomName: "Marcus James",
+        weddingDate: "September 24, 2024",
+        location: "Villa d'Este, Lake Como",
+        venueAddress: "",
+        venueCity: "",
+        googleMapsLink: "",
+        story: "",
+        deity: "Lord Venkateswara",
+        eventName: "Gruha Pravesh",
+        muhurtham: "2:43 AM",
+        family: "Chodapaneedi Family",
+        enable3D: true,
+        enableEnvelope: true,
+        template: initialTemplate,
+        templateDrafts: {},
+        galleryImages: GALLERY_DEFAULTS[initialTemplate] || GALLERY_DEFAULTS["default"],
+        events: (TEMPLATE_DEFAULTS[initialTemplate] || ["Wedding"]).map((name) => ({
+          name,
+          date: "TBD",
+          time: "TBD",
+          location: "TBD",
+          image: "",
+        })),
+        viewLimit: 500,
+        views: 0,
+        isPaid: false,
+        published: false,
+        // Theme Defaults
+        primaryColor: "#581c87",
+        secondaryColor: "#d4af37",
+        fontStyle: "font-['Cormorant_Garamond']",
+        borderRadius: "32px",
+        heroTitle: "A Royal Lavender Love Story",
+        heroSubtitle: "You are cordially invited",
+        heroButtonText: "Open Invitation",
+        rsvpTitle: "RSVP",
+        rsvpSubtitle: "Will you join us in our fairytale?",
+        rsvpButtonText: "Send Your RSVP",
+        footerText: "Created with Love",
+        modalLabel: "Together with their families",
+        modalTitle: "Request the pleasure of your company at celebration of their marriage",
+        modalSubtitle: "at half past two in the afternoon",
+        modalButtonText: "Close with Love 💜",
+      });
+    }
+  }, [initialTemplate, setFormData]);
 
   const currentTemplateId = (formData.template || initialTemplate) as TemplateType;
   const templateConfig = getTemplateById(currentTemplateId);
@@ -121,41 +161,37 @@ export default function Builder() {
   // ── Auth state ──────────────────────────────────────────────────────────────
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [templatePrices, setTemplatePrices] = useState<Record<string, number>>({
-    "housewarming-south": 799,
-    "kerala-wedding": 799,
-    "konaseema": 999,
-    "kerala-envelope-reveal": 1299,
-    "royal-wedding": 1499,
-  });
+  const [templatePrices, setTemplatePrices] = useState<Record<string, number>>({});
+  const [disabledTemplates, setDisabledTemplates] = useState<Set<string>>(new Set());
+
+  // ── Load dynamic prices and availability from Firestore ──────────────
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "templates"), (snap) => {
+      const newPrices: Record<string, number> = {};
+      const newDisabled = new Set<string>();
+      
+      snap.docs.forEach((doc) => {
+        const data = doc.data();
+        if (data.publishPrice) {
+          newPrices[doc.id] = Number(data.publishPrice);
+        }
+        if (data.enabled === false) {
+          newDisabled.add(doc.id);
+        }
+      });
+      
+      setTemplatePrices(prev => ({ ...prev, ...newPrices }));
+      setDisabledTemplates(newDisabled);
+    });
+    return () => unsub();
+  }, []);
+
+  const isTemplateDisabled = disabledTemplates.has(currentTemplateId);
 
   useEffect(() => {
-    async function loadDynamicPrices() {
-      try {
-        const { templates: staticTemplates } = await import("../templates");
-        const templateIds = staticTemplates.map(t => t.id);
-        const promises = templateIds.map(t => getDoc(doc(db, "templates", t)));
-        const snaps = await Promise.all(promises);
-
-        const newPrices: Record<string, number> = { ...templatePrices };
-        snaps.forEach((snap, i) => {
-          if (snap.exists()) {
-            const data = snap.data();
-            if (data.publishPrice) {
-              newPrices[templateIds[i]] = Number(data.publishPrice);
-            }
-          }
-        });
-        setTemplatePrices(newPrices);
-      } catch (e) {
-        console.error("Failed to load dynamic prices in Builder:", e);
-      }
-    }
-
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setAuthLoading(false);
-      loadDynamicPrices();
     });
 
     const timeout = setTimeout(() => {
@@ -388,6 +424,38 @@ export default function Builder() {
             venueAddress: source.venueAddress,
             venueCity: source.venueCity,
             coordinates: source.coordinates,
+            // Hydrate new CMS fields
+            primaryColor: source.primaryColor,
+            secondaryColor: source.secondaryColor,
+            accentColor: source.accentColor,
+            fontStyle: source.fontStyle,
+            headingFont: source.headingFont,
+            bodyFont: source.bodyFont,
+            borderRadius: source.borderRadius,
+            shadowIntensity: source.shadowIntensity,
+            animationStyle: source.animationStyle,
+            coupleNickname: source.coupleNickname,
+            familyNames: source.familyNames,
+            weddingHashtag: source.weddingHashtag,
+            coupleMonogram: source.coupleMonogram,
+            musicUrl: source.musicUrl,
+            autoplayMusic: source.autoplayMusic,
+            rsvpTitle: source.rsvpTitle,
+            rsvpSubtitle: source.rsvpSubtitle,
+            rsvpButtonText: source.rsvpButtonText,
+            whatsappNumber: source.whatsappNumber,
+            rsvpDeadline: source.rsvpDeadline,
+            timeline: source.timeline,
+            countdownDate: source.countdownDate,
+            seoTitle: source.seoTitle,
+            seoDescription: source.seoDescription,
+            ogImage: source.ogImage,
+            heroTitle: (source as any).heroTitle,
+            heroSubtitle: (source as any).heroSubtitle,
+            heroButtonText: (source as any).heroButtonText,
+            modalTitle: (source as any).modalTitle,
+            modalSubtitle: (source as any).modalSubtitle,
+            modalButtonText: (source as any).modalButtonText,
           });
 
           // Sync prevTemplateRef to avoid triggering the template switch effect on initial load
@@ -896,6 +964,11 @@ export default function Builder() {
       return;
     }
 
+    if (isTemplateDisabled) {
+      toast.error("This template is currently unavailable. Please choose another one.");
+      return;
+    }
+
     if (isSaving || isCheckingPayment) return;
     if (showPricingModal && !forceSaveAfterPayment) return;
 
@@ -1275,7 +1348,7 @@ export default function Builder() {
   return (
     <div
       className={`flex-1 grid transition-all duration-500 overflow-hidden h-[calc(100vh-64px)] bg-white relative ${
-        isPreviewMode ? "grid-cols-1" : "grid-cols-[300px_1fr]"
+        isPreviewMode ? "grid-cols-1" : "grid-cols-[380px_1fr]"
       }`}
     >
       {/* ── Sidebar Editor ── */}
@@ -1283,567 +1356,300 @@ export default function Builder() {
         {!isPreviewMode && (
           <motion.aside
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: "300px", opacity: 1 }}
+            animate={{ width: "380px", opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="bg-white border-r border-editorial-border flex flex-col overflow-y-auto shrink-0 z-20"
+            className="bg-white border-r border-gray-100 flex flex-col h-full shrink-0 z-30 shadow-2xl relative"
           >
             {/* Header */}
-            <div className="p-6 border-b border-editorial-border bg-editorial-bg/30">
+            <div className="p-6 border-b border-gray-100 bg-linear-to-b from-gray-50 to-white">
               <button
                 onClick={() => navigate("/templates")}
-                className="flex items-center gap-2 text-[10px] font-bold text-editorial-muted hover:text-editorial-ink transition-colors mb-4 uppercase tracking-[0.2em]"
+                className="flex items-center gap-2 text-[10px] font-bold text-gray-400 hover:text-purple-600 transition-colors mb-4 uppercase tracking-[0.2em] group"
               >
-                <ChevronLeft className="w-3 h-3" />
-                Back to Gallery
+                <ChevronLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-1" />
+                Galleries
               </button>
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-white rounded-lg border border-editorial-border shadow-sm">
-                  <Sparkles className="w-5 h-5 text-editorial-accent" />
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-purple-600 rounded-2xl shadow-lg shadow-purple-200">
+                  <Sparkles className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-serif italic">Wedding Invitation Studio</h1>
-                  <p className="text-[9px] uppercase font-bold tracking-widest text-editorial-muted">
-                    Editing: {templateConfig?.name}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 flex flex-col gap-10 flex-1">
-              {/* Couple Details */}
-              <div>
-                <h2 className="editorial-section-title text-[11px] mb-4">
-                  {isHousewarming ? "Hosts" : "Identity"}
-                </h2>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">
-                      {isHousewarming ? "Primary Host" : "Bride"}
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-editorial-muted" />
-                      <input
-                        name="brideName"
-                        value={formData.brideName || ""}
-                        onChange={handleChange}
-                        className="editorial-input pl-10"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">
-                      {isHousewarming ? "Family/Co-Host" : "Groom"}
-                    </label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-editorial-muted" />
-                      <input
-                        name="groomName"
-                        value={formData.groomName || ""}
-                        onChange={handleChange}
-                        className="editorial-input pl-10"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Housewarming specific */}
-              {isHousewarming && (
-                <div className="space-y-4">
-                  <h2 className="editorial-section-title text-[11px]">Housewarming Details</h2>
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">Deity Name</label>
-                    <input
-                      type="text"
-                      value={formData.deity || ""}
-                      onChange={(e) => setFormData({ ...formData, deity: e.target.value })}
-                      className="editorial-input font-mono"
-                      placeholder="e.g. Lord Venkateswara"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">Ceremony Name</label>
-                    <input
-                      type="text"
-                      value={formData.eventName || ""}
-                      onChange={(e) => setFormData({ ...formData, eventName: e.target.value })}
-                      className="editorial-input"
-                      placeholder="e.g. Gruha Pravesh"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">Muhurtham</label>
-                    <input
-                      type="text"
-                      value={formData.muhurtham || ""}
-                      onChange={(e) => setFormData({ ...formData, muhurtham: e.target.value })}
-                      className="editorial-input"
-                      placeholder="e.g. 2:43 AM"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">Family Name</label>
-                    <input
-                      type="text"
-                      value={formData.family || ""}
-                      onChange={(e) => setFormData({ ...formData, family: e.target.value })}
-                      className="editorial-input"
-                      placeholder="e.g. Chodapaneedi Family"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Events */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="editorial-section-title text-[11px]">
-                    {isHousewarming ? "Pooja Details" : "Itinerary"}
-                  </h2>
-                  <button
-                    onClick={addEvent}
-                    className="p-1 px-2 text-[9px] font-bold uppercase tracking-widest text-editorial-accent hover:bg-editorial-bg rounded border border-editorial-border flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add
-                  </button>
-                </div>
-                <div className="space-y-4">
-                  {formData.events?.map((ev, idx) => (
-                    <div
-                      key={idx}
-                      className="p-4 bg-editorial-bg border border-editorial-border rounded-xl relative group"
-                    >
-                      <button
-                        onClick={() => removeEvent(idx)}
-                        className="absolute top-2 right-2 p-1 text-red-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                      <input
-                        value={ev.name || ""}
-                        onChange={(e) => handleEventChange(idx, "name", e.target.value)}
-                        className="bg-transparent border-none p-0 text-xs font-bold text-editorial-ink w-full focus:ring-0 mb-3"
-                        placeholder="Event Name"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="relative">
-                          <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-editorial-muted" />
-                          <input
-                            value={ev.date || ""}
-                            onChange={(e) => handleEventChange(idx, "date", e.target.value)}
-                            className="editorial-input text-[10px] pl-6 py-1.5 h-auto"
-                            placeholder="Date"
-                          />
-                        </div>
-                        <div className="relative">
-                          <Clock className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-editorial-muted" />
-                          <input
-                            value={ev.time || ""}
-                            onChange={(e) => handleEventChange(idx, "time", e.target.value)}
-                            className="editorial-input text-[10px] pl-6 py-1.5 h-auto"
-                            placeholder="Time"
-                          />
-                        </div>
-                      </div>
-                      <div className="mt-2 relative">
-                        <MapPin className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-editorial-muted" />
-                        <input
-                          value={ev.location || ""}
-                          onChange={(e) => handleEventChange(idx, "location", e.target.value)}
-                          className="editorial-input text-[10px] pl-6 py-1.5 h-auto"
-                          placeholder="Location"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Venue */}
-              <div>
-                <h2 className="editorial-section-title text-[11px] mb-4">Venue & Location</h2>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">Venue Name</label>
-                    <input
-                      name="location"
-                      value={formData.location || ""}
-                      onChange={handleChange}
-                      className="editorial-input"
-                      placeholder="e.g. The Grand Palace Gardens"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-2">
-                      <label className="editorial-label text-[10px]">City</label>
-                      <input
-                        name="venueCity"
-                        value={formData.venueCity || ""}
-                        onChange={handleChange}
-                        className="editorial-input text-[10px]"
-                        placeholder="e.g. Hyderabad"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="editorial-label text-[10px]">Address</label>
-                      <input
-                        name="venueAddress"
-                        value={formData.venueAddress || ""}
-                        onChange={handleChange}
-                        className="editorial-input text-[10px]"
-                        placeholder="Detailed address..."
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-4 pt-1 border-t border-editorial-border">
-                    <div className="space-y-2">
-                      <label className="editorial-label text-[10px]">Google Maps Link</label>
-                      <input
-                        name="googleMapsLink"
-                        value={formData.googleMapsLink || ""}
-                        onChange={handleChange}
-                        className="editorial-input text-[10px]"
-                        placeholder="Paste Google Maps link"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="editorial-label text-[10px]">Coordinates (lat,lng)</label>
-                      <input
-                        name="coordinates"
-                        value={formData.coordinates || ""}
-                        onChange={handleChange}
-                        className="editorial-input text-[10px]"
-                        placeholder="e.g. 16.6785, 81.9159"
-                      />
-                    </div>
-                    <p className="text-[9px] text-editorial-accent font-medium leading-tight">
-                      Paste Google Maps link OR coordinates for best preview.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Story */}
-              <div>
-                <h2 className="editorial-section-title text-[11px] mb-4">Our Story</h2>
-                <div className="space-y-2">
-                  <textarea
-                    name="story"
-                    value={formData.story || ""}
-                    onChange={handleChange}
-                    className="editorial-input min-h-[100px] text-xs"
-                    placeholder="Tell your guests about your journey..."
-                  />
-                </div>
-              </div>
-
-              {/* Visual Effects */}
-              <div>
-                <h2 className="editorial-section-title text-[11px] mb-4">Style & Template</h2>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="editorial-label text-[10px]">Active Template</label>
-                    <select
-                      value={formData.template}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, template: e.target.value as TemplateType }))
-                      }
-                      className="editorial-input text-xs appearance-none bg-white font-medium"
-                    >
-                      <option value="royal-wedding">Indian Royal Wedding</option>
-                      <option value="konaseema">Konaseema Heritage</option>
-                      <option value="kerala-wedding">Kerala Wedding</option>
-                      <option value="kerala-envelope-reveal">Kerala Envelope Reveal</option>
-                      <option value="housewarming-south">South Indian Housewarming</option>
-                    </select>
-                    <p className="text-[9px] text-editorial-muted italic">
-                      Switching templates preserves your text but changes the layout and design assets.
-                    </p>
-                  </div>
-
-                  <label className="flex items-center justify-between p-3 bg-editorial-bg border border-editorial-border rounded-xl cursor-pointer">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-editorial-ink">
-                      Enable 3D Effects
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={!!formData.enable3D}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, enable3D: e.target.checked }))}
-                      className="w-4 h-4 rounded text-editorial-accent focus:ring-editorial-accent cursor-pointer"
-                    />
-                  </label>
-                </div>
-                {(templateConfig?.id === "kerala-envelope-reveal" ||
-                  templateConfig?.id === "housewarming-simple" ||
-                  formData.template === "housewarming-south") && (
-                  <label className="flex items-center justify-between p-3 bg-editorial-bg border border-editorial-border rounded-xl cursor-pointer mt-2">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-editorial-ink">
-                      Enable Envelope Animation
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={!!formData.enableEnvelope}
-                      onChange={(e) => setFormData((prev) => ({ ...prev, enableEnvelope: e.target.checked }))}
-                      className="w-4 h-4 rounded text-editorial-accent focus:ring-editorial-accent cursor-pointer"
-                    />
-                  </label>
-                )}
-              </div>
-
-              {/* Imagery Assets */}
-              <div className="space-y-8">
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="editorial-section-title text-[11px]">Primary Imagery</h2>
-                    <span className="text-[10px] font-bold text-editorial-accent/60 uppercase tracking-widest bg-editorial-accent/5 px-2 py-0.5 rounded">
-                      Hero Section
-                    </span>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="relative group">
-                      <ImageItem
-                        image={formData.coverImage}
-                        className="w-full aspect-[16/9] rounded-2xl border border-editorial-border shadow-sm bg-editorial-bg"
-                        onClick={() => openImageEditor("cover", formData.coverImage || null, undefined, 16 / 9)}
-                      />
-                      <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <div className="p-2 bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-white">
-                          <Edit2 className="w-3.5 h-3.5 text-editorial-accent" />
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-[9px] text-slate-400 font-medium leading-relaxed italic">
-                      Tip: Tap the image to reposition, crop or zoom for the perfect hero layout.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Gallery */}
-                <div className="pt-8 border-t border-editorial-border/60">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="editorial-section-title text-[11px] mb-1">Photo Gallery</h2>
-                      <p className="text-[9px] text-slate-400 font-medium tracking-tight">Showcase your journey</p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        const newGallery = [...(formData.galleryImages || [])];
-                        newGallery.push("");
-                        const newIdx = newGallery.length - 1;
-                        setFormData({ ...formData, galleryImages: newGallery });
-                        openImageEditor("gallery", null, newIdx, 1);
-                      }}
-                      className="p-2 bg-editorial-bg border border-editorial-border rounded-full text-editorial-accent hover:bg-slate-50 transition-all shadow-sm"
-                      title="Add Image"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    {formData.galleryImages?.map((img, idx) => (
-                      <div key={idx} className="relative aspect-square group">
-                        <ImageItem
-                          image={img}
-                          className="w-full h-full rounded-xl border border-editorial-border bg-editorial-bg"
-                          onClick={() => openImageEditor("gallery", img, idx, 1)}
-                        />
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeGalleryImage(idx);
-                          }}
-                          className="absolute -top-1.5 -right-1.5 bg-white shadow-xl border border-red-50 p-1.5 rounded-full text-red-500 opacity-0 group-hover:opacity-100 transition-all z-10 hover:scale-110"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-
-                    {(!formData.galleryImages || formData.galleryImages.length === 0) && (
-                      <button
-                        onClick={() => {
-                          const newGallery = [""];
-                          setFormData({ ...formData, galleryImages: newGallery });
-                          openImageEditor("gallery", null, 0, 1);
-                        }}
-                        className="col-span-3 border-2 border-dashed border-editorial-border rounded-2xl p-8 flex flex-col items-center justify-center gap-3 text-slate-300 hover:text-editorial-accent hover:border-editorial-accent transition-all bg-editorial-bg/30"
-                      >
-                        <Images className="w-6 h-6" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Start your gallery</span>
-                      </button>
+                  <h1 className="text-xl font-serif italic text-gray-900 leading-tight">Design Studio</h1>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    {isTemplateDisabled ? (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                        <p className="text-[9px] uppercase font-bold tracking-widest text-red-500">
+                          Currently Unavailable
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        <p className="text-[9px] uppercase font-bold tracking-widest text-gray-400">
+                          Syncing Real-time
+                        </p>
+                      </>
                     )}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Sidebar Publish Button */}
-            <div className="p-6 border-t border-editorial-border bg-white mt-auto">
-              {!formData.published ? (
-                <button
-                  onClick={() => handleSave()}
-                  disabled={isSaving || isCheckingPayment}
-                  className="w-full editorial-button bg-editorial-ink text-white py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all disabled:opacity-60 shadow-xl"
-                >
-                  {isSaving || isCheckingPayment ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Rocket className="w-4 h-4" />
-                  )}
-                  <span className="text-[11px] font-bold uppercase tracking-[0.2em]">
-                    {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Story"}
-                  </span>
-                </button>
-              ) : hasUnpublishedChanges ? (
-                <motion.button
-                  initial={{ scale: 1 }}
-                  animate={{ scale: [1, 1.01, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  onClick={() => setShowRedeployModal(true)}
-                  disabled={isSaving || isCheckingPayment}
-                  className="w-full editorial-button bg-editorial-accent text-white py-4 rounded-xl flex items-center justify-center gap-2 hover:bg-[#B37E4A] transition-all disabled:opacity-60 shadow-xl relative overflow-hidden"
-                >
-                  <div className="absolute inset-0 bg-white/5 animate-pulse" />
-                  {isSaving || isCheckingPayment ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <RefreshCcw className="w-4 h-4" />
-                  )}
-                  <span className="text-[11px] font-bold uppercase tracking-[0.2em]">Redeploy Changes</span>
-                </motion.button>
-              ) : (
-                <div className="w-full py-4 rounded-xl flex items-center justify-center gap-2 bg-green-50 text-green-700 border border-green-100 shadow-sm">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span className="text-[11px] font-bold uppercase tracking-[0.2em]">Website is Live</span>
-                </div>
-              )}
+            {/* CMS Sections */}
+            <div className="flex-1 overflow-y-auto px-6 py-8 space-y-10 custom-scrollbar pb-32">
+              <Accordion.Root type="single" defaultValue="identity" collapsible className="space-y-4">
+                <Accordion.Item value="identity" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-pink-50 rounded-lg group-hover:bg-pink-100 transition-colors">
+                           <User className="w-4 h-4 text-pink-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">Couple Identity</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4 animate-in fade-in slide-in-from-top-1 duration-300">
+                    <CoupleIdentity />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="hero" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-purple-50 rounded-lg group-hover:bg-purple-100 transition-colors">
+                           <Sparkles className="w-4 h-4 text-purple-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">Hero Section</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <HeroEditor />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="itinerary" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-blue-50 rounded-lg group-hover:bg-blue-100 transition-colors">
+                           <Calendar className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">Itinerary</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <EventBuilder />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="gallery" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-emerald-50 rounded-lg group-hover:bg-emerald-100 transition-colors">
+                           <Images className="w-4 h-4 text-emerald-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">Gallery</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <GalleryManager />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="theme" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-amber-50 rounded-lg group-hover:bg-amber-100 transition-colors">
+                           <Palette className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">Theme & Style</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <ThemeCustomizer />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="music" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-orange-50 rounded-lg group-hover:bg-orange-100 transition-colors">
+                           <RefreshCcw className="w-4 h-4 text-orange-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">Music Assets</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <MusicSettings />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="rsvp" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-cyan-50 rounded-lg group-hover:bg-cyan-100 transition-colors">
+                           <Send className="w-4 h-4 text-cyan-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">RSVP & Contact</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <RSVPContact />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="countdown" className="border-b border-gray-50 pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-indigo-50 rounded-lg group-hover:bg-indigo-100 transition-colors">
+                           <Clock className="w-4 h-4 text-indigo-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">Countdown</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <CountdownSettings />
+                  </Accordion.Content>
+                </Accordion.Item>
+
+                <Accordion.Item value="seo" className="pb-4">
+                  <Accordion.Header className="flex">
+                    <Accordion.Trigger className="flex-1 flex items-center justify-between py-2 text-left group">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-slate-50 rounded-lg group-hover:bg-slate-100 transition-colors">
+                           <Globe className="w-4 h-4 text-slate-600" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-700">SEO & Sharing</span>
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 transition-transform duration-300 group-data-[state=open]:rotate-180" />
+                    </Accordion.Trigger>
+                  </Accordion.Header>
+                  <Accordion.Content className="pt-4">
+                    <SEOSettings />
+                  </Accordion.Content>
+                </Accordion.Item>
+              </Accordion.Root>
+            </div>
+
+            {/* Sidebar Actions */}
+            <div className="p-6 border-t border-gray-100 bg-white/80 backdrop-blur-md absolute bottom-0 inset-x-0">
+               <div className="flex gap-2">
+                 <button
+                   onClick={handleSaveDraft}
+                   disabled={isSavingDraft}
+                   className="flex-1 py-3 px-4 rounded-xl border border-gray-200 text-[10px] font-bold uppercase tracking-widest hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                 >
+                   {isSavingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                   Save
+                 </button>
+                 <button
+                   onClick={() => handleSave()}
+                   disabled={isSaving || isCheckingPayment}
+                   className="flex-[2] py-3 px-4 rounded-xl bg-purple-600 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 flex items-center justify-center gap-2"
+                 >
+                   {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                   Publish Live
+                 </button>
+               </div>
             </div>
           </motion.aside>
         )}
       </AnimatePresence>
 
       {/* ── Main Workspace ── */}
-      <main className="flex-1 flex flex-col bg-[#F9F9F9] relative overflow-hidden">
-        <header className="h-14 bg-white border-b border-editorial-border z-10 shrink-0">
-          <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between w-full">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-editorial-bg rounded-lg border border-editorial-border">
-                <Globe className="w-3.5 h-3.5 text-editorial-muted" />
-                <span className="text-[10px] font-mono text-editorial-ink opacity-70">/story/{siteSlug}</span>
+      <main className="flex-1 flex flex-col bg-gray-50/50 relative overflow-hidden">
+        <header className="h-16 bg-white border-b border-gray-100 z-40 shrink-0">
+          <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
+            <div className="flex items-center gap-8">
+              <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 rounded-xl border border-gray-100 group cursor-default">
+                <Globe className="w-4 h-4 text-gray-400 group-hover:text-purple-600 transition-colors" />
+                <div className="flex flex-col">
+                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter leading-none mb-0.5">Live Preview URL</span>
+                   <span className="text-xs font-mono text-gray-600">/invitation/{siteSlug}</span>
+                </div>
               </div>
 
-              <div className="h-4 w-px bg-editorial-border hidden md:block" />
+              <div className="h-6 w-px bg-gray-200" />
 
-              <div className="flex items-center bg-editorial-bg p-1 rounded-lg border border-editorial-border">
+              <div className="flex items-center bg-gray-100/50 p-1 rounded-xl border border-gray-100">
                 {(["desktop", "tablet", "mobile"] as const).map((d) => {
                   const Icon = d === "desktop" ? Monitor : d === "tablet" ? Tablet : Smartphone;
                   return (
                     <button
                       key={d}
                       onClick={() => setViewDevice(d)}
-                      className={`p-1.5 rounded-md transition-all ${
+                      className={`px-3 py-2 rounded-lg transition-all flex items-center gap-2 ${
                         viewDevice === d
-                          ? "bg-white shadow-sm text-editorial-accent"
-                          : "text-editorial-muted hover:text-editorial-ink"
+                          ? "bg-white shadow-md shadow-gray-200/50 text-purple-600"
+                          : "text-gray-400 hover:text-gray-600 hover:bg-gray-100"
                       }`}
                     >
                       <Icon className="w-4 h-4" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest hidden lg:block">{d}</span>
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="flex items-center gap-3 ml-auto">
-              <button
-                onClick={openNewTab}
-                className="p-2 text-editorial-muted hover:text-editorial-ink hover:bg-editorial-bg rounded-lg transition-all"
-                title="Open Live Preview"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsPreviewMode(!isPreviewMode)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all ${
-                  isPreviewMode
-                    ? "bg-editorial-ink text-white"
-                    : "bg-white border border-editorial-border text-editorial-ink hover:bg-editorial-bg"
-                }`}
-              >
-                {isPreviewMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-                <span>{isPreviewMode ? "Exit Preview" : "Preview Mode"}</span>
-              </button>
-
-              <div className="h-4 w-px bg-editorial-border mx-2" />
-
-              <button
-                onClick={handleSaveDraft}
-                disabled={isSavingDraft}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all bg-white border border-editorial-border text-editorial-ink hover:bg-editorial-bg disabled:opacity-60"
-              >
-                {isSavingDraft ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                <span>{isSavingDraft ? "Saving..." : "Save Draft"}</span>
-              </button>
-
-              <div className="relative group">
-                {!formData.published ? (
+            <div className="flex items-center gap-4">
+               <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleSave()}
-                    disabled={isSaving || isCheckingPayment}
-                    className="editorial-button bg-editorial-ink hover:bg-black text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(0,0,0,0.1)] hover:shadow-[0_0_25px_rgba(200,169,107,0.3)] transition-all group"
+                    onClick={() => setIsPreviewMode(!isPreviewMode)}
+                    className="p-2.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
+                    title={isPreviewMode ? "Exit Fullscreen" : "Fullscreen Preview"}
                   >
-                    {isSaving || isCheckingPayment ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Rocket className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                    )}
-                    <span className="text-[10px] font-bold uppercase tracking-[0.2em]">
-                      {isCheckingPayment ? "Checking..." : isSaving ? "Publishing..." : "🚀 Publish Story"}
-                    </span>
+                    {isPreviewMode ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
                   </button>
-                ) : hasUnpublishedChanges ? (
-                  <div className="relative">
-                    <motion.button
-                      initial={{ scale: 1 }}
-                      animate={{ scale: [1, 1.02, 1] }}
-                      transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-                      onClick={() => setShowRedeployModal(true)}
-                      disabled={isSaving || isCheckingPayment}
-                      className="editorial-button bg-editorial-ink text-white px-6 py-2.5 flex items-center justify-center gap-2.5 disabled:opacity-60 shadow-[0_0_20px_rgba(200,169,107,0.3)] hover:shadow-[0_0_30px_rgba(200,169,107,0.5)] transition-all relative overflow-hidden group border border-editorial-accent/30"
-                    >
-                      <div className="absolute inset-0 bg-editorial-accent/20 animate-pulse" />
-                      {isSaving || isCheckingPayment ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <RefreshCcw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-700" />
-                      )}
-                      <span className="text-[10px] font-bold uppercase tracking-[0.2em] relative z-10">
-                        Redeploy Story
-                      </span>
-                    </motion.button>
-                    <div className="absolute -top-3 -right-2 px-2 py-0.5 bg-editorial-accent text-white text-[8px] font-bold uppercase tracking-tighter rounded-full border-2 border-white shadow-xl pointer-events-none whitespace-nowrap z-20">
-                      Changes Pending
-                    </div>
-                  </div>
-                ) : (
                   <button
-                    disabled
-                    className="flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.2em] bg-green-50 text-green-700 border border-green-100 shadow-sm transition-all grayscale-[0.2]"
+                    onClick={openNewTab}
+                    className="p-2.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-xl transition-all"
+                    title="Open Live Site"
                   >
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>✓ Live</span>
+                    <ExternalLink className="w-5 h-5" />
                   </button>
-                )}
-              </div>
+               </div>
+               
+               <div className="h-6 w-px bg-gray-200" />
+
+               <button
+                  onClick={() => handleSave()}
+                  disabled={isSaving || isCheckingPayment}
+                  className="bg-purple-600 text-white px-6 py-2.5 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-purple-700 transition-all shadow-lg shadow-purple-200 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                  Publish Changes
+                </button>
             </div>
           </div>
         </header>
 
-        {/* Live Preview */}
-        <div className="flex-1 overflow-auto scrollbar-hide relative px-4 mt-6 flex justify-center items-start bg-neutral-50/50">
+        {/* Live Preview Container */}
+        <div className="flex-1 overflow-auto scrollbar-hide relative pt-8 pb-16 px-4 flex justify-center items-start bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:24px_24px]">
           <motion.div
             layout
             key={viewDevice}
@@ -1860,44 +1666,21 @@ export default function Builder() {
             <div className="w-full h-full overflow-y-auto custom-scrollbar bg-white">
               {templateConfig?.component ? (
                 <templateConfig.component
-                  brideName={formData.brideName || ""}
-                  groomName={formData.groomName || ""}
-                  date={formData.weddingDate || ""}
-                  venue={formData.location || ""}
-                  venueAddress={formData.venueAddress}
-                  venueCity={formData.venueCity}
-                  googleMapsEmbedUrl={formData.googleMapsLink}
-                  googleMapsLink={formData.googleMapsLink}
-                  coordinates={formData.coordinates}
-                  story={formData.story}
-                  enable3D={formData.enable3D}
-                  enableEnvelope={formData.enableEnvelope}
-                  coverImage={formData.coverImage}
-                  events={formData.events || []}
-                  galleryImages={formData.galleryImages || []}
-                  deity={formData.deity}
-                  eventName={formData.eventName}
-                  muhurtham={formData.muhurtham}
-                  family={formData.family}
-                  hosts={{
-                    primary: formData.brideName || "",
-                    secondary: formData.groomName || "",
-                  }}
-                  address={formData.venueAddress || formData.location}
-                  image={formData.coverImage}
+                  {...formData}
                   isEditable={true}
-                  onImageEdit={(target: string, index?: number) => {
+                  onUnlock={() => handleSave()}
+                  onEditImage={(target: string, index?: number) => {
                     if (target === "cover") {
                       openImageEditor("cover", formData.coverImage || null);
                     } else if (target === "gallery" && typeof index === "number") {
-                      openImageEditor("gallery", formData.galleryImages?.[index] || null, index);
+                      openImageEditor("gallery", (formData.galleryImages?.[index] as string) || null, index);
                     } else if (target === "event" && typeof index === "number") {
                       openImageEditor("event", formData.events?.[index]?.image || null, index);
                     }
-                  }}
+                  } }
                 />
               ) : (
-                <div className="flex items-center justify-center h-full text-editorial-muted font-serif italic">
+                <div className="flex items-center justify-center h-full text-gray-400 font-serif italic">
                   Template Loading...
                 </div>
               )}
@@ -1958,41 +1741,78 @@ export default function Builder() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-white w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden p-8"
+              className={`w-full max-w-md rounded-3xl shadow-2xl relative overflow-hidden p-8 ${
+                formData.template === 'south-india' 
+                  ? 'bg-[#fefcf7] border-2 border-[#d4af37]/30 shadow-[#d4af37]/20' 
+                  : 'bg-white'
+              }`}
             >
+              {formData.template === 'south-india' && (
+                <>
+                  <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-transparent via-[#d4af37] to-transparent" />
+                  <div className="absolute top-0 left-0 w-24 h-24 bg-[#d4af37]/5 rounded-br-full -translate-x-10 -translate-y-10" />
+                  <div className="absolute bottom-0 right-0 w-32 h-32 bg-[#d4af37]/5 rounded-tl-full translate-x-12 translate-y-12" />
+                </>
+              )}
               <button
                 onClick={() => setShowPricingModal(false)}
                 disabled={isProcessingPayment}
-                className="absolute top-6 right-6 p-2 hover:bg-neutral-100 rounded-full transition-colors"
+                className={`absolute top-6 right-6 p-2 rounded-full transition-colors ${
+                  formData.template === 'south-india' ? 'hover:bg-[#d4af37]/10' : 'hover:bg-neutral-100'
+                }`}
               >
-                <X className="w-5 h-5 text-editorial-muted" />
+                <X className={`w-5 h-5 ${formData.template === 'south-india' ? 'text-[#d4af37]' : 'text-editorial-muted'}`} />
               </button>
 
               <div className="text-center mb-10">
-                <div className="w-16 h-16 bg-editorial-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
-                  <Rocket className="w-8 h-8 text-editorial-accent" />
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+                  formData.template === 'south-india' ? 'bg-[#d4af37]/10' : 'bg-editorial-accent/10'
+                }`}>
+                  {formData.template === 'south-india' ? (
+                    <Crown className="w-8 h-8 text-[#d4af37]" />
+                  ) : (
+                    <Rocket className="w-8 h-8 text-editorial-accent" />
+                  )}
                 </div>
-                <h2 className="text-3xl font-serif italic mb-2">Publish Your Story</h2>
+                <h2 className={`text-3xl font-serif italic mb-2 ${
+                  formData.template === 'south-india' ? 'text-purple-900' : ''
+                }`}>
+                  {formData.template === 'south-india' ? 'Unlock South India Royal Invitation' : 'Publish Your Story'}
+                </h2>
                 <p className="text-xs uppercase tracking-widest text-editorial-muted">{templateConfig?.name} Template</p>
                 <div className="flex items-center justify-center gap-2 mt-4">
-                  <span className="text-4xl font-serif font-bold text-editorial-ink">
-                    ₹{templatePrices[formData.template || "royal-wedding"] || 999}
+                  <span className={`text-4xl font-serif font-bold ${
+                    formData.template === 'south-india' ? 'text-[#d4af37]' : 'text-editorial-ink'
+                  }`}>
+                    ₹{templatePrices[formData.template || "royal-wedding"] || "..."}
                   </span>
                   <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted">One-time</span>
                 </div>
               </div>
 
               <div className="space-y-4 mb-10">
-                {[
-                  `Up to ${calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 999)} views included`,
-                  "Beautiful live website",
-                  "Shareable link",
-                  "WhatsApp sharing",
-                  "Pay once, valid forever",
-                ].map((item, i) => (
+                {(formData.template === 'south-india' 
+                  ? [
+                      "Full template editing",
+                      "Unlimited image uploads",
+                      "RSVP management",
+                      "Custom music & Event sections",
+                      "Mobile optimized invitation",
+                      "Shareable live link",
+                      "Pay once, valid forever"
+                    ]
+                  : [
+                    `Up to ${calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 0)} views included`,
+                    "Beautiful live website",
+                    "Shareable link",
+                    "WhatsApp sharing",
+                    "Pay once, valid forever",
+                  ]).map((item, i) => (
                   <div key={i} className="flex items-center gap-4 text-xs font-medium text-editorial-secondary">
-                    <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
-                    <span>{item}</span>
+                    <CheckCircle2 className={`w-4 h-4 shrink-0 ${
+                      formData.template === 'south-india' ? 'text-[#d4af37]' : 'text-green-500'
+                    }`} />
+                    <span className={formData.template === 'south-india' ? 'text-purple-900/80' : ''}>{item}</span>
                   </div>
                 ))}
               </div>
@@ -2001,15 +1821,19 @@ export default function Builder() {
                 <button
                   onClick={handlePaymentAndPublish}
                   disabled={isProcessingPayment}
-                  className="w-full bg-editorial-ink text-white py-4 rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] shadow-xl hover:bg-black transition-all flex items-center justify-center gap-2"
+                  className={`w-full py-4 rounded-2xl text-[11px] font-bold uppercase tracking-[0.2em] shadow-xl transition-all flex items-center justify-center gap-2 ${
+                    formData.template === 'south-india'
+                      ? 'bg-gradient-to-r from-[#d4af37] via-[#b8860b] to-[#d4af37] text-white hover:brightness-110 shadow-[#d4af37]/20 bg-[length:200%_auto] animate-shimmer'
+                      : 'bg-editorial-ink text-white hover:bg-black'
+                  }`}
                 >
                   {isProcessingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   {isProcessingPayment
                     ? "Processing..."
-                    : `Pay ₹${templatePrices[formData.template || "royal-wedding"] || 999} & Publish`}
+                    : `Pay ₹${templatePrices[formData.template || "royal-wedding"] || "..."} & Publish`}
                 </button>
                 <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-widest bg-editorial-bg py-2 rounded-lg border border-editorial-border/40">
-                  AFTER {calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 999)} VIEWS, TOP UP{" "}
+                  AFTER {calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 0)} VIEWS, TOP UP{" "}
                   <span className="text-editorial-ink font-bold">₹99</span> TO GET{" "}
                   <span className="text-editorial-ink font-bold">1000 MORE VIEWS</span>
                 </p>

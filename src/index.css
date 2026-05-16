@@ -16,6 +16,8 @@
   --color-editorial-surface: #FFFFFF;
   --color-editorial-navy: #0F172A;
   --color-editorial-navy-light: #111827;
+
+  --shadow-luxury: 0 25px 50px -12px rgba(31, 42, 68, 0.12);
 }
 
 @layer base {

@@ -10,6 +10,7 @@ import KonaseemaWeddingTemplate from "./components/templates/KonaseemaWeddingTem
 import KeralaWeddingTemplate from "./components/templates/KeralaWeddingTemplate";
 import KeralaRevealTemplate from "./components/templates/KeralaRevealTemplate";
 import SouthIndianHousewarmingTemplate from "./components/templates/SouthIndianHousewarmingTemplate";
+import SouthIndiaTemplate from "./components/templates/SouthIndiaTemplate";
 import { WeddingEvent } from "./types";
 import { calculateFreeViews } from "./lib/pricing";
 
@@ -59,7 +60,6 @@ export interface TemplateConfig {
     enableEnvelope?: boolean;
     [key: string]: any;
   }>;
-  price: number;
 }
 
 export const templates: TemplateConfig[] = [
@@ -70,7 +70,6 @@ export const templates: TemplateConfig[] = [
     thumbnail: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=800",
     previewImage: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=1200",
     component: IndianRoyalWeddingTemplate,
-    price: 999
   },
   {
     id: "konaseema",
@@ -79,7 +78,6 @@ export const templates: TemplateConfig[] = [
     thumbnail: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=800",
     previewImage: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=1200",
     component: KonaseemaWeddingTemplate,
-    price: 899
   },
   {
     id: "kerala-wedding",
@@ -88,7 +86,6 @@ export const templates: TemplateConfig[] = [
     thumbnail: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800",
     previewImage: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=1200",
     component: KeralaWeddingTemplate,
-    price: 949
   },
   {
     id: "kerala-envelope-reveal",
@@ -97,7 +94,6 @@ export const templates: TemplateConfig[] = [
     thumbnail: "https://images.unsplash.com/photo-1607344645866-009c522b63e2?auto=format&fit=crop&q=80&w=800",
     previewImage: "https://images.unsplash.com/photo-1607344645866-009c522b63e2?auto=format&fit=crop&q=80&w=1200",
     component: KeralaRevealTemplate,
-    price: 1299
   },
   {
     id: "housewarming-south",
@@ -106,7 +102,14 @@ export const templates: TemplateConfig[] = [
     thumbnail: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?auto=format&fit=crop&q=80&w=800",
     previewImage: "https://images.unsplash.com/photo-1585338107529-13afc5f02586?auto=format&fit=crop&q=80&w=1200",
     component: SouthIndianHousewarmingTemplate,
-    price: 1199
+  },
+  {
+    id: "south-india",
+    name: "South India Royal Lavender",
+    category: "premium",
+    thumbnail: "https://z-cdn-media.chatglm.cn/files/8171ce15-5501-416e-bd1d-d44d10f6f6fb.jpg?auth_key=1878836107-a0445fa1c2c14fe2b33a5ae83339a445-0-ea768b9484c57d9c6cd767781e4693ab",
+    previewImage: "https://z-cdn-media.chatglm.cn/files/b7ada327-7273-4c2c-b631-416c3087fa7c.jpg?auth_key=1878836107-d03b6dfd429748f58353a6eeb2884749-0-027fefdd8997e4cfdc0a0635c9864b1e",
+    component: SouthIndiaTemplate,
   }
 ];
 

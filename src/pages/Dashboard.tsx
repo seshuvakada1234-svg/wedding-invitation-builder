@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Plus, 
@@ -19,28 +19,55 @@ import {
   TrendingUp,
   X,
   Check,
-  Rocket
+  Rocket,
+  Eye,
+  Calendar,
+  Layers,
+  Sparkles
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { auth, authFetch } from "../lib/firebase";
+import { authFetch } from "../lib/firebase";
 import { WeddingInvite } from "../types";
 import toast from "react-hot-toast";
 import SEO from "../components/SEO";
+import { useAuth } from "../context/AuthContext";
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [sites, setSites] = useState<WeddingInvite[]>([]);
   const [loading, setLoading] = useState(true);
   const [isProcessingTopUp, setIsProcessingTopUp] = useState(false);
   const [selectedSiteForTopUp, setSelectedSiteForTopUp] = useState<WeddingInvite | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  const stats = useMemo(() => {
+    const totalViews = sites.reduce((acc, site) => acc + (Number(site.views) || 0), 0);
+    const activeInvitations = sites.filter(s => s.published).length;
+    const drafts = sites.filter(s => !s.published).length;
+    return { totalViews, activeInvitations, drafts };
+  }, [sites]);
+
+  async function fetchUserProfile() {
+    if (!user) return;
+    try {
+      const res = await authFetch(`/api/user-status?userId=${user.uid}`);
+      const data = await res.json();
+      if (data.success) {
+        setUserProfile(data);
+      }
+    } catch (err) {
+      console.error("Error fetching user profile:", err);
+    }
+  }
 
   async function fetchSites() {
-    if (!auth.currentUser) return;
+    if (!user) return;
     try {
       const res = await authFetch("/api/get-invites");
       const data = await res.json();
       if (data.success) {
-        setSites(data.invites);
+        setSites(data.invites || []);
       }
     } catch (err) {
       console.error("Dashboard fetch error:", err);
@@ -50,20 +77,16 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      if (user) {
-        fetchSites();
-      } else {
-        setLoading(false);
-        navigate('/login');
-      }
-    });
-
-    return () => unsubscribe();
-  }, [navigate]);
+    if (user) {
+      fetchSites();
+      fetchUserProfile();
+    } else if (!loading) {
+      navigate('/login');
+    }
+  }, [user, loading, navigate]);
 
   const handleTopUp = async (site: WeddingInvite) => {
-    if (!auth.currentUser || isProcessingTopUp) return;
+    if (!user || isProcessingTopUp) return;
     setIsProcessingTopUp(true);
 
     try {
@@ -73,7 +96,7 @@ export default function Dashboard() {
 
       if (!razorpayKeyId) throw new Error("Razorpay key not found");
 
-      const token = await auth.currentUser.getIdToken();
+      const token = await user.getIdToken();
       
       const orderRes = await fetch("/api/create-topup-order", {
         method: "POST",
@@ -126,8 +149,8 @@ export default function Dashboard() {
           }
         },
         prefill: {
-          email: auth.currentUser?.email || "",
-          name: auth.currentUser?.displayName || "",
+          email: user?.email || "",
+          name: user?.displayName || "",
         },
         theme: { color: "#C8A96B" }
       };
@@ -150,20 +173,69 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex-1 py-12 px-6 lg:px-8 max-w-6xl mx-auto w-full">
+    <div className="flex-1 py-12 px-6 lg:px-8 max-w-7xl mx-auto w-full">
       <SEO title="User Dashboard" description="Manage your luxury cinematic wedding invitations, track RSVPs, and monitor guest views." />
-      <div className="flex justify-between items-end mb-12">
-        <div>
-          <h1 className="text-4xl font-serif italic mb-2">Your Stories</h1>
-          <p className="text-sm text-editorial-secondary">Manage and experience your cinematic invitation stories.</p>
-        </div>
-        <button 
-          onClick={() => navigate('/')}
-          className="editorial-button flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Your Story</span>
-        </button>
+      
+      {/* Welcome Section */}
+      <div className="mb-12">
+         <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col md:flex-row md:items-end justify-between gap-6"
+         >
+            <div>
+               <h1 className="text-4xl md:text-5xl font-serif italic mb-2">
+                 Welcome back, {user?.displayName?.split(' ')[0] || 'Member'} 👋
+               </h1>
+               <p className="text-editorial-secondary font-medium tracking-wide">
+                 Manage your luxury cinematic wedding invitations.
+               </p>
+            </div>
+            <button 
+              onClick={() => navigate('/templates')}
+              className="editorial-button flex items-center justify-center gap-2 py-4 px-8 shadow-xl hover:shadow-2xl active:scale-95 transition-all"
+            >
+              <Plus className="w-5 h-5" />
+              <span>Create New Invitation</span>
+            </button>
+         </motion.div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+         {[
+           { label: "Total Invitations", value: sites.length, icon: Layers, color: "text-blue-600", bg: "bg-blue-50" },
+           { label: "Guest Views", value: stats.totalViews.toLocaleString(), icon: Eye, color: "text-purple-600", bg: "bg-purple-50" },
+           { label: "Active Events", value: stats.activeInvitations, icon: Calendar, color: "text-green-600", bg: "bg-green-50" },
+           { label: "Purchased", value: Object.keys(userProfile?.paidTemplates || {}).length, icon: Sparkles, color: "text-editorial-accent", bg: "bg-yellow-50" }
+         ].map((stat, i) => (
+           <motion.div
+             key={stat.label}
+             initial={{ opacity: 0, y: 20 }}
+             animate={{ opacity: 1, y: 0 }}
+             transition={{ delay: i * 0.1 }}
+             className="editorial-card p-6 bg-white border border-editorial-border/60 shadow-sm"
+           >
+              <div className="flex items-center gap-4">
+                 <div className={`w-12 h-12 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center`}>
+                    <stat.icon className="w-6 h-6" />
+                 </div>
+                 <div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-editorial-muted">{stat.label}</div>
+                    <div className="text-2xl font-serif font-bold text-editorial-ink tracking-tight">{stat.value}</div>
+                 </div>
+              </div>
+           </motion.div>
+         ))}
+      </div>
+
+      <div className="flex items-center justify-between mb-8 border-b border-editorial-border pb-4">
+          <h2 className="text-xl font-serif italic text-editorial-ink">Your Invitations</h2>
+          <div className="flex items-center gap-4 text-[10px] font-bold uppercase tracking-widest text-editorial-muted">
+            <span>{stats.activeInvitations} Live</span>
+            <span>•</span>
+            <span>{stats.drafts} Drafts</span>
+          </div>
       </div>
 
       <div className="grid gap-6">

@@ -4,20 +4,10 @@
  */
 
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Sparkles, LayoutDashboard, Settings, Heart, Globe, Camera, Share2 } from "lucide-react";
+import { ArrowRight, Heart, Globe, Camera, Share2 } from "lucide-react";
 import { motion } from "motion/react";
 import SEO from "../components/SEO";
-
-const TEMPLATES = [
-  {
-    id: 'konaseema',
-    name: 'Konaseema Heritage',
-    description: 'Traditional patterns, vibrant colors.',
-    price: '₹899',
-    image: 'https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=800',
-    tag: 'Classic'
-  }
-];
+import Hero from "../components/Hero";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -29,116 +19,7 @@ export default function Home() {
         description="Craft ultra-luxury digital wedding invitations with cinematic storytelling, RSVP management, and premium templates. The #1 luxury wedding website builder."
       />
 
-      {/* Hero */}
-      <section className="py-24 px-8 max-w-6xl mx-auto text-center">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-        >
-          <span className="uppercase tracking-[0.4em] text-[10px] font-bold text-editorial-accent mb-6 block">
-            World-Class Digital Wedding Invitations
-          </span>
-          <h1 className="text-6xl md:text-8xl font-serif italic tracking-tighter mb-8 leading-tight">
-            Wedding <br /> 
-            <span className="text-editorial-accent">Invitation</span>
-          </h1>
-          <p className="max-w-2xl mx-auto text-editorial-secondary mb-12 text-lg leading-relaxed font-editorial">
-            Premium Cinematic Invitations for Modern Love Stories. <br />
-            Where heritage meets AI-powered elegance.
-          </p>
-        </motion.div>
-      </section>
-
-      {/* Templates Grid */}
-      <section className="px-8 pb-32 max-w-6xl mx-auto w-full">
-        {/* Featured Signature Template (Indian Royal Wedding) */}
-        <section className="px-0 pb-32 max-w-6xl mx-auto w-full text-center md:text-left">
-           <div className="flex items-center justify-center md:justify-start gap-3 text-editorial-accent mb-6">
-              <Sparkles className="w-5 h-5" />
-              <span className="text-[11px] font-bold uppercase tracking-[0.4em]">Featured Luxury Wedding Website</span>
-           </div>
-           <div className="relative group cursor-pointer" onClick={() => navigate('/builder/royal-wedding')}>
-              <div className="aspect-[21/9] rounded-3xl overflow-hidden mb-8 border border-editorial-border shadow-soft group-hover:shadow-2xl transition-all duration-700 bg-black">
-                 {/* Live Preview Iframe */}
-                 <div className="absolute inset-0 pointer-events-none transition-opacity duration-1000 group-hover:opacity-100 opacity-60">
-                   <iframe
-                     src="/preview/royal-wedding"
-                     className="absolute top-0 left-0 w-[400%] h-[400%] scale-[0.25] origin-top-left transition-transform duration-[2s] group-hover:scale-[0.26]"
-                     loading="lazy"
-                     title="Indian Royal Wedding Preview"
-                     scrolling="no"
-                   />
-                 </div>
-
-                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex flex-col justify-end p-12 translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
-                    <h3 className="text-white text-5xl md:text-7xl font-serif italic mb-4">Indian Royal Wedding</h3>
-                    <p className="text-white/80 text-xl md:text-2xl font-editorial italic mb-4 opacity-0 group-hover:opacity-100 transition-opacity delay-100">Immerse your guests in a world of cinematic elegance.</p>
-                    <div className="flex items-center gap-4">
-                       <button className="editorial-button bg-white text-editorial-ink hover:scale-105 border-none">
-                         Create Your Story
-                       </button>
-                       <span className="text-white/60 text-sm font-medium tracking-widest uppercase">Premium Collection</span>
-                    </div>
-                 </div>
-              </div>
-           </div>
-        </section>
-
-        <h2 className="editorial-section-title mb-12">Luxury Invitation Templates</h2>
-        
-        <div className="grid md:grid-cols-2 gap-16 mb-16">
-          {TEMPLATES.map((tpl, i) => (
-            <motion.div
-              key={tpl.id}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.2, duration: 0.8 }}
-              className="group cursor-pointer relative"
-              onClick={() => navigate(`/builder/${tpl.id}`)}
-            >
-              <div className="relative aspect-[16/10] mb-8 overflow-hidden rounded-[32px] shadow-lg group-hover:shadow-2xl transition-all duration-700 bg-white">
-                <div className="absolute inset-0 pointer-events-none transition-opacity duration-1000 group-hover:opacity-100 opacity-40">
-                  <iframe
-                    src={`/preview/${tpl.id}`}
-                    className="absolute top-0 left-0 w-[400%] h-[400%] scale-[0.25] origin-top-left transition-transform duration-[2s] group-hover:scale-[0.27]"
-                    loading="lazy"
-                    title={tpl.name}
-                    scrolling="no"
-                  />
-                </div>
-                
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-10 translate-y-6 group-hover:translate-y-0 transition-transform duration-500">
-                  <div className="flex items-center justify-between items-end">
-                    <div>
-                      <span className="bg-editorial-accent text-white px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest mb-4 inline-block">
-                        {tpl.tag}
-                      </span>
-                      <h3 className="text-white text-4xl font-serif italic mb-2">{tpl.name}</h3>
-                      <p className="text-white/70 text-lg font-serif italic max-w-sm mb-6">
-                        {tpl.description}
-                      </p>
-                    </div>
-                    <div className="w-14 h-14 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 group-hover:bg-white group-hover:text-black transition-all">
-                      <ArrowRight className="w-6 h-6" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-
-        <div className="flex justify-center">
-           <button 
-             onClick={() => navigate('/templates')}
-             className="editorial-button bg-editorial-ink text-white hover:bg-black px-10 py-4"
-           >
-             Luxury Invitation Templates
-           </button>
-        </div>
-      </section>
+      <Hero />
 
       {/* SEO Content Sections */}
       <section className="bg-editorial-bg py-32 px-8 border-t border-editorial-border overflow-hidden">

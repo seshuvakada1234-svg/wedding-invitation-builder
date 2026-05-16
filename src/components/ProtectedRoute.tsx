@@ -17,10 +17,13 @@ export default function ProtectedRoute({
   // Show spinner while Firebase restores session
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-          <p className="text-zinc-400 text-sm">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center bg-editorial-bg">
+        <div className="flex flex-col items-center gap-6">
+          <div className="relative">
+             <div className="w-16 h-16 border-2 border-editorial-accent/20 rounded-full" />
+             <div className="absolute top-0 left-0 w-16 h-16 border-2 border-editorial-accent border-t-transparent rounded-full animate-spin" />
+          </div>
+          <p className="text-editorial-muted font-serif italic text-lg animate-pulse">Entering your cinematic story...</p>
         </div>
       </div>
     );

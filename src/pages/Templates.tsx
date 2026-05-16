@@ -23,7 +23,7 @@ import SEO from "../components/SEO";
 
 export default function TemplatesPage() {
   const navigate = useNavigate();
-  const [prices, setPrices] = useState<Record<string, number>>({});
+  const [dbTemplates, setDbTemplates] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
 
   // Track which template card is currently loading so we can show a spinner
@@ -35,17 +35,11 @@ export default function TemplatesPage() {
     return () => unsub();
   }, []);
 
-  // ── Load dynamic prices from Firestore ────────────────────────────────────
+  // ── Load dynamic templates & prices from Firestore ────────────────────────
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "templates"), (snap) => {
-      const newPrices: Record<string, number> = {};
-      snap.docs.forEach((doc) => {
-        const data = doc.data();
-        if (data.publishPrice) {
-          newPrices[doc.id] = Number(data.publishPrice);
-        }
-      });
-      setPrices(newPrices);
+      const tList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setDbTemplates(tList);
     });
     return () => unsub();
   }, []);
@@ -152,76 +146,89 @@ export default function TemplatesPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12">
-        {staticTemplates.map((tpl, i) => {
-          const isLoading = loadingTemplateId === tpl.id;
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 text-center md:text-left">
+        {dbTemplates.length === 0 && !loadingTemplateId && (
+          <div className="col-span-full py-32 editorial-card bg-white border-dashed border-2 flex flex-col items-center justify-center">
+            <Sparkles className="w-12 h-12 text-editorial-accent mb-4 opacity-20" />
+            <p className="text-editorial-muted font-serif italic text-2xl">No templates available yet.</p>
+            <p className="text-xs uppercase tracking-widest text-editorial-muted mt-2">Check back soon for new cinematic stories</p>
+          </div>
+        )}
+        {dbTemplates
+          .filter(t => t.enabled !== false)
+          .map((tplDb, i) => {
+            const tplCode = staticTemplates.find(st => st.id === tplDb.id);
+            if (!tplCode) return null;
+            
+            const tpl = { ...tplCode, ...tplDb };
+            const isLoading = loadingTemplateId === tpl.id;
 
-          return (
-            <motion.div
-              key={tpl.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.1 }}
-              className={`group relative overflow-hidden rounded-[32px] shadow-xl cursor-pointer transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl ${isLoading ? "pointer-events-none opacity-70" : ""}`}
-              onClick={() => handleTemplateClick(tpl.id)}
-            >
-              <div className="relative aspect-[3/4] overflow-hidden bg-editorial-bg">
-                {/* Fallback & Background Image while iframe loads */}
-                <img
-                  src={tpl.previewImage}
-                  alt={tpl.name}
-                  className="w-full h-full object-cover transition-opacity duration-1000 opacity-20 group-hover:opacity-40"
-                  loading="lazy"
-                />
-
-                {/* Live Preview Iframe */}
-                <div className="absolute inset-0 pointer-events-none">
-                  <iframe
-                    src={`/preview/${tpl.id}`}
-                    className="absolute top-0 left-0 w-[300%] h-[300%] scale-[0.3333] origin-top-left transition-transform duration-700 group-hover:scale-[0.35]"
+            return (
+              <motion.div
+                key={tpl.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: i * 0.1 }}
+                className={`group relative overflow-hidden rounded-[32px] shadow-xl cursor-pointer transition-all duration-500 hover:-translate-y-2 hover:shadow-2xl ${isLoading ? "pointer-events-none opacity-70" : ""}`}
+                onClick={() => handleTemplateClick(tpl.id)}
+              >
+                <div className="relative aspect-[3/4] overflow-hidden bg-editorial-bg">
+                  {/* Fallback & Background Image while iframe loads */}
+                  <img
+                    src={tpl.thumbnail || tpl.previewImage}
+                    alt={tpl.name}
+                    className="w-full h-full object-cover transition-opacity duration-1000 opacity-20 group-hover:opacity-40"
                     loading="lazy"
-                    title={tpl.name}
-                    scrolling="no"
                   />
-                </div>
 
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-8">
-                  {isLoading ? (
-                    <div className="flex items-center gap-2 text-white/80">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-xs font-bold uppercase tracking-widest">Opening...</span>
-                    </div>
-                  ) : (
-                    <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
-                      <p className="text-white/60 text-[10px] font-bold uppercase tracking-[0.3em] mb-2">
-                        Premium Collection
-                      </p>
-                      <h3 className="text-white text-3xl font-serif italic mb-4 leading-tight">
-                        {tpl.name}
-                      </h3>
-                      <div className="flex items-center justify-between">
-                        <span className="text-white/90 text-sm font-medium">
-                          ₹{prices[tpl.id] ?? tpl.price} Access
-                        </span>
-                        <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 group-hover:bg-white group-hover:text-black transition-all">
-                          <ArrowRight className="w-5 h-5" />
+                  {/* Live Preview Iframe */}
+                  <div className="absolute inset-0 pointer-events-none">
+                    <iframe
+                      src={`/preview/${tpl.id}`}
+                      className="absolute top-0 left-0 w-[300%] h-[300%] scale-[0.3333] origin-top-left transition-transform duration-700 group-hover:scale-[0.35]"
+                      loading="lazy"
+                      title={tpl.name}
+                      scrolling="no"
+                    />
+                  </div>
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex flex-col justify-end p-8">
+                    {isLoading ? (
+                      <div className="flex items-center gap-2 text-white/80">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span className="text-xs font-bold uppercase tracking-widest">Opening...</span>
+                      </div>
+                    ) : (
+                      <div className="transform translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
+                        <p className="text-white/60 text-[10px] font-bold uppercase tracking-[0.3em] mb-2 text-left">
+                          Premium Collection
+                        </p>
+                        <h3 className="text-white text-3xl font-serif italic mb-4 leading-tight text-left">
+                          {tpl.name}
+                        </h3>
+                        <div className="flex items-center justify-between">
+                          <span className="text-white/90 text-sm font-medium">
+                            {tpl.publishPrice ? `₹${tpl.publishPrice} Access` : "Loading price..."}
+                          </span>
+                          <div className="w-10 h-10 bg-white/10 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 group-hover:bg-white group-hover:text-black transition-all">
+                            <ArrowRight className="w-5 h-5" />
+                          </div>
                         </div>
                       </div>
+                    )}
+                  </div>
+
+                  {(tpl.category === 'premium' || tpl.id === 'south-india') && (
+                    <div className="absolute top-6 left-6">
+                      <span className="bg-editorial-accent text-white px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">
+                        Signature
+                      </span>
                     </div>
                   )}
                 </div>
-
-                {tpl.category === 'premium' && (
-                  <div className="absolute top-6 left-6">
-                    <span className="bg-editorial-accent text-white px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">
-                      Signature
-                    </span>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
+              </motion.div>
+            );
+          })}
       </div>
     </div>
   );

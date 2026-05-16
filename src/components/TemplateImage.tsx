@@ -14,6 +14,7 @@ interface TemplateImageProps {
   alt?: string;
   isEditable?: boolean;
   onEdit?: () => void;
+  onImageChange?: (file: File) => void;
 }
 
 /**
@@ -26,12 +27,34 @@ export default function TemplateImage({
   className = "", 
   alt = "Wedding Photo",
   isEditable = false,
-  onEdit
+  onEdit,
+  onImageChange
 }: TemplateImageProps) {
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
   const isObject = typeof image === "object" && image !== null && "url" in image;
   const url = isObject ? (image as EditableImage).url : (image as string);
   
   const fallbackUrl = "https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=800&h=600&fit=crop&auto=format";
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && onImageChange) {
+      onImageChange(file);
+    }
+  };
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    if (!isEditable) return;
+    e.stopPropagation();
+    
+    // If we have onImageChange, we handle the upload ourselves
+    if (onImageChange) {
+      fileInputRef.current?.click();
+    }
+    
+    // Still call onEdit for external notifications
+    onEdit?.();
+  };
   
   // If we have something but it's not a URL (like null, empty string, or a placeholder)
   // we might want to show the fallback or a placeholder.
@@ -107,13 +130,17 @@ export default function TemplateImage({
   return (
     <motion.div 
       className={`relative overflow-hidden cursor-pointer group ${className}`}
-      onClick={(e) => {
-        e.stopPropagation();
-        onEdit?.();
-      }}
+      onClick={handleContainerClick}
       whileHover="hover"
       initial="initial"
     >
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
       {/* Background scaling effect */}
       <motion.div 
         className="w-full h-full"

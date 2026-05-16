@@ -20,19 +20,22 @@ export default function Pricing() {
   const [viewLimit, setViewLimit] = useState(500);
 
   useEffect(() => {
+    let unsub: (() => void) | undefined;
     async function loadPrice() {
       try {
-        const { getDoc, doc } = await import("firebase/firestore");
+        const { onSnapshot, doc } = await import("firebase/firestore");
         const { db } = await import("../lib/firebase");
-        const snap = await getDoc(doc(db, "templates", "minimal"));
-        if (snap.exists()) {
-          const data = snap.data();
-          if (data.publishPrice) {
-             const price = Number(data.publishPrice);
-             setMinimalPrice(price);
-             setViewLimit(calculateFreeViews(price));
+        
+        unsub = onSnapshot(doc(db, "templates", "minimal"), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.publishPrice) {
+               const price = Number(data.publishPrice);
+               setMinimalPrice(price);
+               setViewLimit(calculateFreeViews(price));
+            }
           }
-        }
+        });
       } catch (e) {
         console.error("Failed to load minimal price:", e);
       }
@@ -46,6 +49,7 @@ export default function Pricing() {
     document.body.appendChild(script);
 
     return () => {
+      if (unsub) unsub();
       document.body.removeChild(script);
     };
   }, []);

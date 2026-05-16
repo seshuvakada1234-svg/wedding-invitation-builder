@@ -765,44 +765,54 @@ async function startServer() {
         });
       }
 
+      // Default fallback prices if DB lookup fails
       const DEFAULT_PRICES: Record<string, number> = {
-        "minimal": 49900,
-        "housewarming-south": 79900,
-        "kerala-wedding": 79900,
-        "konaseema": 99900,
-        "kerala-envelope-reveal": 129900,
-        "royal-wedding": 149900,
-        "all_access": 199900,
+        "minimal": 499,
+        "housewarming-south": 799,
+        "kerala-wedding": 799,
+        "konaseema": 999,
+        "kerala-envelope-reveal": 1299,
+        "royal-wedding": 1499,
+        "all_access": 1999,
       };
       
-      let amount = DEFAULT_PRICES[templateId] || 49900;
+      let amountInRupees = DEFAULT_PRICES[templateId] || 499;
 
-      // ✅ Fetch dynamic price from Firestore
-      try {
-        const db = getAdminDb();
-        if (db) {
-          const templateDoc = await db.collection("templates").doc(templateId).get();
-          if (templateDoc.exists) {
-            const data = templateDoc.data();
-            if (data?.publishPrice) {
-              amount = Math.round(Number(data.publishPrice) * 100);
-              console.log(`Dynamic price fetched for ${templateId}: ${amount} paise`);
-            }
+      // ✅ Fetch dynamic price from Firestore and check if template is enabled
+      const db = getAdminDb();
+      if (db) {
+        const templateDoc = await db.collection("templates").doc(templateId).get();
+        if (templateDoc.exists) {
+          const data = templateDoc.data();
+          
+          // Check if template is disabled
+          if (data?.enabled === false) {
+            return res.status(403).json({
+              success: false,
+              error: "This template is currently unavailable. Please choose another one.",
+              code: "TEMPLATE_DISABLED"
+            });
           }
+
+          if (data?.publishPrice) {
+            amountInRupees = Number(data.publishPrice);
+            console.log(`Dynamic price fetched for ${templateId}: ₹${amountInRupees}`);
+          }
+        } else {
+           console.warn(`Template document ${templateId} not found in Firestore. Using default price: ₹${amountInRupees}`);
         }
-      } catch (dbErr) {
-        console.error("Error fetching dynamic price from Firestore:", dbErr);
-        // Continue with default amount
       }
 
+      const amountInPaise = Math.round(amountInRupees * 100);
+
       const order = await rp.orders.create({
-        amount,
+        amount: amountInPaise,
         currency: "INR",
         receipt: `receipt_${Date.now()}`,
       });
 
       console.log("Order created:", order.id, "for template:", templateId);
-      res.json({ success: true, order, amount, templateId });
+      res.json({ success: true, order, amount: amountInPaise, templateId });
     } catch (error: any) {
       console.error("Create order error:", error.message || error);
 

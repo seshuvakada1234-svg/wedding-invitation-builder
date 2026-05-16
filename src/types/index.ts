@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type TemplateType = 'royal-wedding' | 'konaseema' | 'kerala-wedding' | 'kerala-envelope-reveal' | 'housewarming-south';
+export type TemplateType = 'royal-wedding' | 'konaseema' | 'kerala-wedding' | 'kerala-envelope-reveal' | 'housewarming-south' | 'south-india';
 
 export interface WeddingEvent {
   name: string;
@@ -46,6 +46,47 @@ export interface TemplateDraft {
   venueAddress?: string;
   venueCity?: string;
   coordinates?: string;
+  // Theme & Appearance
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  fontStyle?: string;
+  headingFont?: string;
+  bodyFont?: string;
+  borderRadius?: string;
+  shadowIntensity?: string;
+  animationStyle?: string;
+  // Couple Identity
+  coupleNickname?: string;
+  familyNames?: string;
+  weddingHashtag?: string;
+  coupleMonogram?: string | EditableImage;
+  // Music
+  musicUrl?: string;
+  autoplayMusic?: boolean;
+  // Hero
+  heroTitle?: string;
+  heroSubtitle?: string;
+  heroButtonText?: string;
+  modalTitle?: string;
+  modalSubtitle?: string;
+  modalButtonText?: string;
+  // RSVP
+  rsvpTitle?: string;
+  rsvpSubtitle?: string;
+  rsvpButtonText?: string;
+  whatsappNumber?: string;
+  rsvpDeadline?: string;
+  // Story/Timeline
+  timeline?: { date: string; title: string; description: string; image?: string | EditableImage }[];
+  // Countdown
+  countdownDate?: string;
+  // SEO
+  seoTitle?: string;
+  seoDescription?: string;
+  ogImage?: string | EditableImage;
+  footerText?: string;
+  modalLabel?: string;
 }
 
 export interface WeddingInvite {
@@ -99,6 +140,40 @@ export interface WeddingInvite {
   eventName?: string;
   story?: string;
   events: WeddingEvent[];
+  // CMS Fields
+  primaryColor?: string;
+  secondaryColor?: string;
+  accentColor?: string;
+  fontStyle?: string;
+  headingFont?: string;
+  bodyFont?: string;
+  borderRadius?: string;
+  shadowIntensity?: string;
+  animationStyle?: string;
+  coupleNickname?: string;
+  familyNames?: string;
+  weddingHashtag?: string;
+  coupleMonogram?: string | EditableImage;
+  musicUrl?: string;
+  autoplayMusic?: boolean;
+  rsvpTitle?: string;
+  rsvpSubtitle?: string;
+  rsvpButtonText?: string;
+  whatsappNumber?: string;
+  rsvpDeadline?: string;
+  timeline?: { date: string; title: string; description: string; image?: string | EditableImage }[];
+  countdownDate?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  ogImage?: string | EditableImage;
+  footerText?: string;
+  modalLabel?: string;
+  modalSubtitle?: string;
+  modalButtonText?: string;
+  heroTitle?: string;
+  heroSubtitle?: string;
+  heroButtonText?: string;
+  modalTitle?: string;
 
   // ── Per-template drafts (for template-switcher memory) ───────────────────
   templateDrafts?: Record<string, TemplateDraft>;
