@@ -32,8 +32,12 @@ export interface TemplateDraft {
   location: string;
   coverImage?: string | EditableImage;
   coverImageKey?: string;
+  heroImage?: string | EditableImage;
+  backgroundImage?: string | EditableImage;
+  introImage?: string | EditableImage;
   galleryImages: (string | EditableImage)[];
   galleryImageKeys?: string[];
+  eventImages?: (string | EditableImage)[];
   events: WeddingEvent[];
   story?: string;
   muhurtham?: string;

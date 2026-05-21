@@ -334,8 +334,12 @@ export default function Builder() {
     location: source.location || "",
     coverImage: source.coverImage,
     coverImageKey: source.coverImageKey,
+    heroImage: source.heroImage,
+    backgroundImage: source.backgroundImage,
+    introImage: source.introImage,
     galleryImages: source.galleryImages || [],
     galleryImageKeys: source.galleryImageKeys || [],
+    eventImages: source.eventImages || [],
     events: source.events || [],
     story: source.story,
     muhurtham: source.muhurtham,
@@ -956,6 +960,52 @@ export default function Builder() {
     }
   };
 
+  const uploadToR2 = async (imgUrl: string): Promise<string> => {
+    try {
+      const res = await fetch(imgUrl);
+      const blob = await res.blob();
+      const extension = blob.type.split("/")[1] || "jpg";
+      const filename = `uploaded_image_${Date.now()}.${extension}`;
+      const file = new File([blob], filename, { type: blob.type });
+      const uploaded = await uploadImage(file);
+      return uploaded.url;
+    } catch (e) {
+      console.error("uploadToR2 failed for", imgUrl, e);
+      return imgUrl;
+    }
+  };
+
+  const resolveImage = async (image: any): Promise<any> => {
+    if (!image) return null;
+
+    let imgUrl = typeof image === "string" ? image : image.url;
+    if (!imgUrl) return image;
+
+    if (imgUrl.startsWith("https://")) {
+      return image;
+    }
+
+    if (imgUrl.startsWith("blob:") || imgUrl.startsWith("data:")) {
+      try {
+        const r2Url = await uploadToR2(imgUrl);
+        if (typeof image === "string") {
+          return r2Url;
+        } else {
+          return {
+            ...image,
+            url: r2Url,
+            file: undefined, // remove file to avoid payload/memory bloat
+          };
+        }
+      } catch (err) {
+        console.error("resolveImage failed:", err);
+        return image;
+      }
+    }
+
+    return image;
+  };
+
   // ─── handleSave ──────────────────────────────────────────────────────────────
   const handleSave = async (forceSaveAfterPayment = false) => {
     if (!currentUser) {
@@ -1029,25 +1079,85 @@ export default function Builder() {
         },
       };
 
-      const finalizedData = await uploadPendingImages(dataToSave);
-      const currentDraft = getCurrentDataAsDraft(finalizedData);
-      
-      const id = inviteId || finalizedData.slug || siteSlug;
+      const rawDraft = getCurrentDataAsDraft(dataToSave);
+      const existingPublished: Partial<TemplateDraft> = formData.publishedData || {};
+
+      // REDEPLOY FIX logic using resolveImage helper
+      const newHero = await resolveImage(rawDraft.heroImage);
+      const heroImage = newHero ?? existingPublished.heroImage;
+
+      const newCover = await resolveImage(rawDraft.coverImage);
+      const coverImage = newCover ?? existingPublished.coverImage;
+
+      const newBackground = await resolveImage(rawDraft.backgroundImage);
+      const backgroundImage = newBackground ?? existingPublished.backgroundImage;
+
+      const newIntro = await resolveImage(rawDraft.introImage);
+      const introImage = newIntro ?? existingPublished.introImage;
+
+      const rawGallery = rawDraft.galleryImages || [];
+      const resolvedGallery = await Promise.all(
+        rawGallery.map((img) => resolveImage(img))
+      );
+      const galleryImages = resolvedGallery.length > 0 
+        ? resolvedGallery 
+        : (existingPublished.galleryImages || []);
+
+      const rawEventImages = rawDraft.eventImages || [];
+      const resolvedEventImages = await Promise.all(
+        rawEventImages.map((img) => resolveImage(img))
+      );
+      const eventImages = resolvedEventImages.length > 0
+        ? resolvedEventImages
+        : ((existingPublished as any)?.eventImages || []);
+
+      const rawEvents = rawDraft.events || [];
+      const resolvedEvents = await Promise.all(
+        rawEvents.map(async (ev) => {
+          const imgVal = ev.image || (ev as any).img;
+          if (imgVal) {
+            const resolvedImg = await resolveImage(imgVal);
+            return {
+              ...ev,
+              image: resolvedImg
+            };
+          }
+          return ev;
+        })
+      );
+
+      // Construct publishedData ONLY AFTER R2 UPLOADS COMPLETE
+      const publishedData = {
+        ...rawDraft,
+        heroImage,
+        coverImage,
+        backgroundImage,
+        introImage,
+        galleryImages,
+        eventImages,
+        events: resolvedEvents,
+        updatedAt: new Date().toISOString(),
+        deployedAt: new Date().toISOString(),
+      };
+
+      console.log("DEPLOY DATA", publishedData);
+
+      const id = inviteId || formData.slug || siteSlug;
 
       const inviteData: Partial<WeddingInvite> = {
-        ...finalizedData,
-        draftData: currentDraft,
-        publishedData: currentDraft, // SYNC Draft to Live
+        ...formData,
+        draftData: rawDraft,
+        publishedData: publishedData,
         id,
         userId: currentUser.uid,
         userName: currentUser.displayName || "User",
         email: currentUser.email || "",
         slug: id,
-        template: currentDraft.template,
-        brideName: currentDraft.brideName,
-        groomName: currentDraft.groomName,
-        weddingDate: currentDraft.weddingDate,
-        location: currentDraft.location,
+        template: rawDraft.template,
+        brideName: rawDraft.brideName,
+        groomName: rawDraft.groomName,
+        weddingDate: rawDraft.weddingDate,
+        location: rawDraft.location,
         status: 'live',
         isPaid: true,
         hasUnpublishedChanges: false,
