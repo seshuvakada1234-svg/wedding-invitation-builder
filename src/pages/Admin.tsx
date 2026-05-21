@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   Search, Check, X, Loader2,
   Users, Globe, CreditCard, Image, Layout, Trash2,
-  ShieldOff, TrendingUp, LogOut
+  ShieldOff, TrendingUp, LogOut, Download
 } from "lucide-react";
 import { auth, authFetch, db } from "../lib/firebase";
 import { 
@@ -32,6 +32,9 @@ interface Stats {
   totalInvites: number;
   totalRevenue: number;
   activeWebsites: number;
+  deployRevenue?: number;
+  redeployRevenue?: number;
+  topupRevenue?: number;
 }
 
 // ✅ Smart date formatter
@@ -53,14 +56,122 @@ function formatDate(val: any): string {
   }
 }
 
+// ✅ Map template identifier to user-friendly name
+function getTemplateName(templateId: string): string {
+  const id = (templateId || "").toLowerCase().trim();
+  if (id === "royal-wedding" || id === "royal") return "Royal-Wedding";
+  if (id === "kerala" || id === "kerala-wedding") return "Kerala-Wedding";
+  if (id === "kerala-envelope-reveal" || id === "kerala-reveal") return "Kerala-Envelope-Reveal";
+  if (id === "housewarming-south" || id === "housewarming") return "Housewarming-South";
+  if (id === "south-india") return "South-India";
+  if (id === "konaseema") return "Konaseema";
+  return "Minimalist";
+}
+
 export default function Admin() {
   const [invites, setInvites] = useState<WeddingInvite[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [adminImages, setAdminImages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
   const [search, setSearch] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "deploy" | "redeploy" | "topup">("all");
+  const [isBackfilling, setIsBackfilling] = useState(false);
+  const [isBackfillingImages, setIsBackfillingImages] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+  const [imageSubFilter, setImageSubFilter] = useState<"ALL" | "DEPLOY" | "REDEPLOY" | "HERO" | "GALLERY" | "BACKGROUND">("ALL");
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(auth.currentUser);
+
+  const groupedUsers = useMemo(() => {
+    const usersMap: Record<string, {
+      userId: string;
+      email: string;
+      brideName?: string;
+      groomName?: string;
+      imageCount: number;
+      deployCount: number;
+      templates: Set<string>;
+    }> = {};
+
+    adminImages.forEach((img) => {
+      const uid = img.userId || "anonymous";
+      if (!usersMap[uid]) {
+        usersMap[uid] = {
+          userId: uid,
+          email: img.email || "Unknown user",
+          brideName: img.brideName || "",
+          groomName: img.groomName || "",
+          imageCount: 0,
+          deployCount: 0,
+          templates: new Set<string>(),
+        };
+      }
+      usersMap[uid].imageCount++;
+      if (img.templateName) {
+        usersMap[uid].templates.add(img.templateName);
+      }
+      if (img.email && (!usersMap[uid].email || usersMap[uid].email === "Unknown user")) {
+        usersMap[uid].email = img.email;
+      }
+      if (img.brideName && !usersMap[uid].brideName) usersMap[uid].brideName = img.brideName;
+      if (img.groomName && !usersMap[uid].groomName) usersMap[uid].groomName = img.groomName;
+    });
+
+    invites.forEach((invite) => {
+      const uid = invite.userId || "anonymous";
+      if (!usersMap[uid]) {
+        usersMap[uid] = {
+          userId: uid,
+          email: invite.email || "Unknown user",
+          brideName: invite.brideName || invite.draftData?.brideName || "",
+          groomName: invite.groomName || invite.draftData?.groomName || "",
+          imageCount: 0,
+          deployCount: 0,
+          templates: new Set<string>(),
+        };
+      }
+      usersMap[uid].deployCount++;
+      const currentTemplate = invite.templateName || (invite.template ? getTemplateName(invite.template) : "");
+      if (currentTemplate) {
+        usersMap[uid].templates.add(currentTemplate);
+      }
+      if (invite.email && (!usersMap[uid].email || usersMap[uid].email === "Unknown user")) {
+        usersMap[uid].email = invite.email;
+      }
+      if (invite.brideName && !usersMap[uid].brideName) {
+        usersMap[uid].brideName = invite.brideName;
+      }
+      if (invite.groomName && !usersMap[uid].groomName) {
+        usersMap[uid].groomName = invite.groomName;
+      }
+    });
+
+    return Object.values(usersMap).sort((a, b) => b.imageCount - a.imageCount || b.deployCount - a.deployCount);
+  }, [adminImages, invites]);
+
+  const selectedUserImages = useMemo(() => {
+    if (!selectedUserId) return [];
+    
+    let items = adminImages.filter((img) => (img.userId || "anonymous") === selectedUserId);
+
+    if (imageSubFilter === "DEPLOY") {
+      items = items.filter((img) => img.source === "deploy");
+    } else if (imageSubFilter === "REDEPLOY") {
+      items = items.filter((img) => img.source === "redeploy");
+    } else if (imageSubFilter === "HERO") {
+      items = items.filter((img) => (img.imageType || "").toUpperCase() === "HERO");
+    } else if (imageSubFilter === "GALLERY") {
+      items = items.filter((img) => (img.imageType || "").toUpperCase() === "GALLERY");
+    } else if (imageSubFilter === "BACKGROUND") {
+      items = items.filter((img) => {
+        const type = (img.imageType || "").toUpperCase();
+        return type === "BACKGROUND" || type === "BG";
+      });
+    }
+
+    return items;
+  }, [adminImages, selectedUserId, imageSubFilter]);
 
   // Dynamic Real-time Stats
   const [liveStats, setLiveStats] = useState<Stats>({
@@ -68,6 +179,9 @@ export default function Admin() {
     totalInvites: 0,
     totalRevenue: 0,
     activeWebsites: 0,
+    deployRevenue: 0,
+    redeployRevenue: 0,
+    topupRevenue: 0,
   });
 
   const [dbTemplates, setDbTemplates] = useState<any[]>([]);
@@ -195,13 +309,35 @@ export default function Admin() {
         unsubs.current.push(u2);
 
         // 3. Live Revenue & Payments History
-        const qPayments = query(collection(db, "payments"), where("status", "==", "paid"));
+        const qPayments = collection(db, "payments");
         const u3 = onSnapshot(qPayments, (snap) => {
-          const revenue = snap.docs.reduce((sum, doc) => {
+          let totalRevenue = 0;
+          let deployRevenue = 0;
+          let redeployRevenue = 0;
+          let topupRevenue = 0;
+
+          snap.docs.forEach((doc) => {
             const data = doc.data();
-            return sum + (Number(data.amount) || 0);
-          }, 0);
-          setLiveStats(prev => ({ ...prev, totalRevenue: revenue }));
+            const amount = Number(data.amount) || 0;
+            const pType = data.paymentType || data.type || "deploy";
+
+            totalRevenue += amount;
+            if (pType === "redeploy") {
+              redeployRevenue += amount;
+            } else if (pType === "topup") {
+              topupRevenue += amount;
+            } else {
+              deployRevenue += amount;
+            }
+          });
+
+          setLiveStats(prev => ({ 
+            ...prev, 
+            totalRevenue, 
+            deployRevenue, 
+            redeployRevenue, 
+            topupRevenue 
+          }));
           
           const paymentsList = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
           setPayments(paymentsList.sort((a, b) => {
@@ -230,6 +366,21 @@ export default function Admin() {
         }, (err) => console.error("Templates listener error:", err));
         unsubs.current.push(ut);
 
+        // 5. Admin Images Listener
+        const uImg = onSnapshot(collection(db, "adminImages"), (snap) => {
+          const imgList = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+          setAdminImages(imgList.sort((a, b) => {
+            const getTs = (val: any) => {
+              if (!val) return 0;
+              if (val && typeof val === "object" && "toDate" in val) return val.toDate().getTime();
+              const d = new Date(val);
+              return isNaN(d.getTime()) ? 0 : d.getTime();
+            };
+            return getTs(b.uploadedAt) - getTs(a.uploadedAt);
+          }));
+        }, (err) => console.error("Admin images listener error:", err));
+        unsubs.current.push(uImg);
+
       } else {
         setLoading(false);
       }
@@ -240,6 +391,75 @@ export default function Admin() {
       unsubs.current.forEach(u => u());
     };
   }, []);
+
+  const handleExportCSV = () => {
+    try {
+      const headers = ["Email", "Template", "Type", "Amount", "Views Added", "Date", "Bride Name", "Groom Name"];
+      const rows = payments.map(p => {
+        const pType = (p.paymentType || p.type || "deploy").toUpperCase();
+        
+        const matchedInvite = invites.find(i => i.id === p.invitationId || i.id === p.inviteId || i.userId === p.userId && (i.templateId === p.templateId || i.template === p.templateId));
+        
+        const email = p.email || matchedInvite?.email || p.userId || "Unknown";
+        
+        const rawTemplateId = p.templateId || matchedInvite?.templateId || matchedInvite?.template || "minimal";
+        const template = p.templateName || (rawTemplateId ? getTemplateName(rawTemplateId) : "Minimalist");
+        
+        const amount = p.amount || 0;
+        const viewsAdded = p.viewsAdded || "—";
+        const dStr = formatDate(p.createdAt);
+        
+        const brideName = p.brideName || matchedInvite?.brideName || matchedInvite?.draftData?.brideName || "";
+        const groomName = p.groomName || matchedInvite?.groomName || matchedInvite?.draftData?.groomName || "";
+        
+        return [
+          `"${email.replace(/"/g, '""')}"`,
+          `"${template.replace(/"/g, '""')}"`,
+          `"${pType.replace(/"/g, '""')}"`,
+          amount,
+          `"${viewsAdded}"`,
+          `"${dStr.replace(/"/g, '""')}"`,
+          `"${brideName.replace(/"/g, '""')}"`,
+          `"${groomName.replace(/"/g, '""')}"`
+        ].join(",");
+      });
+
+      const csvContent = [headers.join(","), ...rows].join("\n");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `payment_history_export_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success("CSV export downloaded successfully!");
+    } catch (err: any) {
+      console.error("Export failed:", err);
+      toast.error("Failed to export template payments data.");
+    }
+  };
+
+  useEffect(() => {
+    if (tab === "payments") {
+      const triggerBackfill = async () => {
+        try {
+          setIsBackfilling(true);
+          const res = await authFetch("/api/admin/backfill-payments", { method: "POST" });
+          const data = await res.json();
+          if (data.success && data.backfilledCount > 0) {
+            console.log(`Auto-backfilled ${data.backfilledCount} payment records.`);
+            toast.success(`Successfully backfilled ${data.backfilledCount} old payment records!`);
+          }
+        } catch (err) {
+          console.error("Auto backfill failed:", err);
+        } finally {
+          setIsBackfilling(false);
+        }
+      };
+      triggerBackfill();
+    }
+  }, [tab]);
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this invitation permanently?")) return;
@@ -261,6 +481,43 @@ export default function Admin() {
       toast.success("Website unpublished");
     } catch {
       toast.error("Failed to unpublish");
+    }
+  }
+
+  useEffect(() => {
+    if (tab === "images") {
+      const triggerBackfillImages = async () => {
+        try {
+          setIsBackfillingImages(true);
+          const res = await authFetch("/api/admin/backfill-images", { method: "POST" });
+          const data = await res.json();
+          if (data.success && data.processedCount > 0) {
+            console.log(`Sync-backfilled images from ${data.processedCount} invitations.`);
+            toast.success(`Successfully scanned & synchronized all uploaded user images!`);
+          }
+        } catch (err) {
+          console.error("Image backfill failed:", err);
+        } finally {
+          setIsBackfillingImages(false);
+        }
+      };
+      triggerBackfillImages();
+    }
+  }, [tab]);
+
+  async function handleDeleteImage(imageId: string) {
+    if (!confirm("Are you sure you want to delete this uploaded image from the records?")) return;
+    try {
+      const res = await authFetch(`/api/admin/image/${imageId}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        toast.success("Image record removed successfully.");
+        setAdminImages(prev => prev.filter(img => img.id !== imageId));
+      } else {
+        toast.error("Failed to delete image: " + (data.error || "unknown error"));
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete image");
     }
   }
 
@@ -424,104 +681,452 @@ export default function Admin() {
           )}
 
           {/* ── PAYMENTS ── */}
-          {tab === "payments" && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-3 gap-4">
-                {[
-                  { label: "Successful Payments", value: payments.length,                                 color: "text-green-600"      },
-                  { label: "Live Websites",       value: liveStats.activeWebsites,                        color: "text-amber-500"      },
-                  { label: "Total Revenue",       value: `₹${liveStats.totalRevenue.toLocaleString()}`,   color: "text-editorial-ink"  },
-                ].map(({ label, value, color }) => (
-                  <div key={label} className="editorial-card bg-white p-6 text-center">
-                    <p className="text-[10px] uppercase tracking-widest font-bold text-editorial-muted mb-3">
-                      {label}
-                    </p>
-                    <p className={`text-3xl font-serif italic ${color}`}>{value}</p>
-                  </div>
-                ))}
-              </div>
+          {tab === "payments" && (() => {
+            const filteredPayments = payments.filter((p) => {
+              if (paymentFilter === "all") return true;
+              const pType = (p.paymentType || p.type || "deploy").toLowerCase().trim();
+              return pType === paymentFilter;
+            });
+            return (
+              <div className="space-y-6">
+                {/* Overall Metadata & Individual Revenues */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: "🚀 Deploy Revenue",   value: `₹${(liveStats.deployRevenue || 0).toLocaleString()}`,   color: "text-blue-600 font-bold" },
+                    { label: "🔁 Redeploy Revenue", value: `₹${(liveStats.redeployRevenue || 0).toLocaleString()}`, color: "text-cyan-600 font-bold" },
+                    { label: "👁 Topup Revenue",    value: `₹${(liveStats.topupRevenue || 0).toLocaleString()}`,    color: "text-amber-600 font-bold" },
+                    { label: "Total Revenue",       value: `₹${(liveStats.totalRevenue || 0).toLocaleString()}`,    color: "text-editorial-ink font-bold border-l-2 pl-4 border-editorial-accent" },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="editorial-card bg-white p-5 shadow-sm">
+                      <p className="text-[10px] uppercase tracking-widest font-bold text-editorial-muted mb-2">
+                        {label}
+                      </p>
+                      <p className={`text-2xl font-serif italic ${color}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
 
-              <div className="editorial-card bg-white overflow-hidden shadow-sm">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-editorial-bg/10 text-[10px] uppercase font-bold tracking-widest text-editorial-muted border-b border-editorial-border">
-                      <th className="px-6 py-4">User</th>
-                      <th className="px-6 py-4">Payment ID</th>
-                      <th className="px-6 py-4">Template</th>
-                      <th className="px-6 py-4 text-right">Amount</th>
-                      <th className="px-6 py-4">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-editorial-border">
-                    {payments.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center text-editorial-muted text-sm italic">
-                          No successful payments recorded yet.
-                        </td>
+                {/* Filters & Export Control Bar */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-lg border border-editorial-border/60 shadow-sm">
+                  <div className="flex flex-wrap gap-1.5">
+                    {(["all", "deploy", "redeploy", "topup"] as const).map((mode) => {
+                      const isActive = paymentFilter === mode;
+                      return (
+                        <button
+                          key={mode}
+                          onClick={() => setPaymentFilter(mode)}
+                          className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-wider uppercase transition-all duration-200 ${
+                            isActive
+                              ? "bg-editorial-ink text-white shadow-sm"
+                              : "bg-editorial-bg text-editorial-muted hover:bg-editorial-bg/80 hover:text-editorial-ink"
+                          }`}
+                        >
+                          {mode === "all" ? "All" : mode === "deploy" ? "🚀 Deploy" : mode === "redeploy" ? "🔁 Redeploy" : "👁 Topup"}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={handleExportCSV}
+                    className="flex items-center gap-2 px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white font-bold text-xs uppercase tracking-wider rounded transition-all shadow-sm"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Export CSV
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center bg-editorial-bg/10 p-4 rounded border border-editorial-border/40 text-xs">
+                  <div className="text-editorial-muted">
+                    Showing <span className="font-bold text-editorial-ink">{filteredPayments.length}</span> of <span className="font-bold text-editorial-ink">{payments.length}</span> total payments.
+                  </div>
+                  <div className="text-editorial-muted">
+                    <span className="font-bold text-editorial-ink">{liveStats.activeWebsites}</span> Live Websites online.
+                  </div>
+                </div>
+
+                <div className="editorial-card bg-white overflow-hidden shadow-sm">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-editorial-bg/10 text-[10px] uppercase font-bold tracking-widest text-editorial-muted border-b border-editorial-border">
+                        <th className="px-6 py-4">User</th>
+                        <th className="px-6 py-4">Payment ID</th>
+                        <th className="px-6 py-4">Template</th>
+                        <th className="px-6 py-4">Name</th>
+                        <th className="px-6 py-4">Type</th>
+                        <th className="px-6 py-4 text-right">Amount</th>
+                        <th className="px-6 py-4">Date</th>
+                        <th className="px-6 py-4 text-center">Views Added</th>
                       </tr>
-                    )}
-                    {payments.map((p) => (
-                      <tr key={p.id} className="hover:bg-editorial-bg/20 transition-colors">
-                        <td className="px-6 py-4">
-                          <p className="text-sm font-semibold text-editorial-ink">
-                            {p.email ?? p.userId?.slice(0, 14) + "..." ?? "Unknown"}
-                          </p>
-                          <p className="text-[10px] text-editorial-muted font-mono">
-                            {p.userId}
-                          </p>
-                        </td>
-                        <td className="px-6 py-4 text-xs font-mono text-editorial-accent">
-                          {p.razorpayPaymentId || "—"}
-                        </td>
-                        <td className="px-6 py-4 text-xs capitalize">
-                          {p.templateId || "minimal"}
-                        </td>
-                        <td className="px-6 py-4 text-sm font-bold text-right">
-                          ₹{p.amount || 0}
-                        </td>
-                        <td className="px-6 py-4 text-xs text-editorial-muted">
-                          {formatDate(p.createdAt)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-editorial-border">
+                      {filteredPayments.length === 0 && (
+                        <tr>
+                          <td colSpan={8} className="px-6 py-12 text-center text-editorial-muted text-sm italic">
+                            No matching payments found.
+                          </td>
+                        </tr>
+                      )}
+                      {filteredPayments.map((p) => {
+                        const pType = (p.paymentType || p.type || "deploy").toLowerCase().trim();
+                        const viewsAdded = p.viewsAdded;
+                        
+                        // Join with invites collection to backfill on-the-fly dynamically
+                        const matchedInvite = invites.find(i => i.id === p.invitationId || i.id === p.inviteId || i.userId === p.userId && (i.templateId === p.templateId || i.template === p.templateId));
+                        
+                        const displayEmail = p.email || matchedInvite?.email || p.userId || "Unknown";
+                        const slug = p.slug || matchedInvite?.slug || "";
+                        const formattedSlug = slug ? (slug.startsWith("/") ? slug : `/${slug}`) : "";
+                        
+                        const rawTemplateId = p.templateId || matchedInvite?.templateId || matchedInvite?.template || "minimal";
+                        const templateName = p.templateName || (rawTemplateId ? getTemplateName(rawTemplateId) : "Minimalist");
+
+                        const brideName = p.brideName || matchedInvite?.brideName || matchedInvite?.draftData?.brideName || "";
+                        const groomName = p.groomName || matchedInvite?.groomName || matchedInvite?.draftData?.groomName || "";
+                        const coupleNames = (brideName && groomName) ? `${brideName} & ${groomName}` : (p.siteTitle || matchedInvite?.draftData?.heroTitle || "—");
+
+                        return (
+                          <tr key={p.id} className="hover:bg-editorial-bg/20 transition-colors">
+                            <td className="px-6 py-4">
+                              <p className="text-sm font-semibold text-editorial-ink">
+                                {displayEmail}
+                              </p>
+                              {formattedSlug && (
+                                <p className="text-[10px] text-editorial-muted font-mono bg-editorial-bg/60 px-1.5 py-0.5 rounded inline-block mt-1">
+                                  {formattedSlug}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-mono text-editorial-accent">
+                              {p.razorpayPaymentId || "—"}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-semibold capitalize text-editorial-ink">
+                              {templateName}
+                            </td>
+                            <td className="px-6 py-4 text-xs italic font-medium text-editorial-ink">
+                              {coupleNames}
+                            </td>
+                            <td className="px-6 py-4 text-xs">
+                              {pType === "redeploy" ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold tracking-wider rounded-full bg-cyan-100 text-cyan-800 uppercase">
+                                  🔁 REDEPLOY
+                                </span>
+                              ) : pType === "topup" ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold tracking-wider rounded-full bg-amber-100 text-amber-800 uppercase">
+                                  👁 TOPUP
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[10px] font-bold tracking-wider rounded-full bg-blue-100 text-blue-800 uppercase">
+                                  🚀 DEPLOY
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-sm font-bold text-right text-editorial-ink">
+                              ₹{p.amount || 0}
+                            </td>
+                            <td className="px-6 py-4 text-xs text-editorial-muted">
+                              {formatDate(p.createdAt)}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-bold text-center text-editorial-ink">
+                              {viewsAdded ? (
+                                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono text-[10px]">
+                                  +{viewsAdded.toLocaleString()}
+                                </span>
+                              ) : (
+                                <span className="text-editorial-muted">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* ── IMAGES ── */}
           {tab === "images" && (
             <div className="space-y-6">
-              <p className="text-sm text-editorial-muted">
-                Hero and gallery images uploaded by users.
-              </p>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {invites.filter((i) => i.heroImage).map((inv) => (
-                  <div key={inv.id} className="editorial-card bg-white overflow-hidden group">
-                    <div className="aspect-video bg-editorial-bg overflow-hidden">
-                      <img
-                        src={inv.heroImage}
-                        alt="hero"
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-                      <div className="p-3">
-                        <p className="text-xs font-semibold text-editorial-ink truncate">
-                          {inv.email ?? "Unknown user"}
-                        </p>
-                      <p className="text-[10px] font-mono text-editorial-accent truncate">
-                        /{inv.slug}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {invites.filter((i) => i.heroImage).length === 0 && (
-                  <div className="col-span-4 text-center py-16 text-editorial-muted text-sm">
-                    No images uploaded yet.
+              {/* Back & Status Header */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-editorial-border/35 pb-4">
+                <div>
+                  {selectedUserId ? (
+                    <button
+                      onClick={() => setSelectedUserId(null)}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-editorial-accent hover:text-editorial-ink transition-colors bg-editorial-bg px-2.5 py-1.5 rounded border border-editorial-border/40"
+                    >
+                      ← Back to Users
+                    </button>
+                  ) : (
+                    <p className="text-sm text-editorial-muted">
+                      Displaying user-uploaded assets grouped by user profiles.
+                    </p>
+                  )}
+                </div>
+
+                {isBackfillingImages && (
+                  <div className="flex items-center gap-2 text-xs text-editorial-accent bg-editorial-bg px-3 py-1.5 rounded font-mono animate-pulse border border-editorial-border/30">
+                    <span className="w-2 h-2 rounded-full bg-editorial-accent animate-ping" />
+                    Synchronizing assets...
                   </div>
                 )}
               </div>
+
+              {!selectedUserId ? (
+                /* STEP 1: USER LIST VIEW */
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {groupedUsers.map((usr) => {
+                    const initials = (usr.email || "U").trim().substring(0, 2).toUpperCase();
+                    const coupleNames = (usr.brideName && usr.groomName) 
+                      ? `${usr.brideName} & ${usr.groomName}` 
+                      : "";
+                    const displayName = coupleNames || usr.email.split("@")[0] || "Anonymous User";
+
+                    return (
+                      <div 
+                        key={usr.userId} 
+                        className="editorial-card bg-white p-6 hover:shadow-lg transition-all duration-300 flex flex-col justify-between group border border-editorial-border/45 hover:border-editorial-accent/40 animate-fadeIn"
+                      >
+                        <div className="space-y-4">
+                          {/* Profile image / Monogram */}
+                          <div className="flex items-center gap-4">
+                            <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-stone-100 to-amber-50 flex items-center justify-center border border-editorial-border/50 font-serif italic text-lg text-editorial-ink font-bold shadow-xs group-hover:scale-105 transition-transform duration-300">
+                              {initials}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-serif italic text-xl text-editorial-ink leading-tight truncate" title={displayName}>
+                                {displayName}
+                              </h4>
+                              <p className="text-xs text-editorial-muted font-mono truncate mt-0.5" title={usr.email}>
+                                {usr.email}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Stats List */}
+                          <div className="space-y-2 pt-2 border-t border-editorial-border/20 text-xs font-mono">
+                            <div className="flex justify-between items-center">
+                              <span className="text-editorial-muted text-[10px] uppercase tracking-wider">Deploys:</span>
+                              <span className="font-bold text-editorial-ink text-sm">{usr.deployCount}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-editorial-muted text-[10px] uppercase tracking-wider">Images:</span>
+                              <span className="font-bold text-editorial-ink text-sm">{usr.imageCount}</span>
+                            </div>
+                          </div>
+
+                          {/* Templates List */}
+                          <div className="space-y-1">
+                            <span className="text-[10px] text-editorial-muted uppercase tracking-wider font-mono block">Templates:</span>
+                            <div className="flex flex-wrap gap-1">
+                              {usr.templates.size > 0 ? (
+                                Array.from(usr.templates).map((tmpl, idx) => (
+                                  <span 
+                                    key={idx} 
+                                    className="text-[10px] font-semibold text-editorial-accent uppercase tracking-wider px-2 py-0.5 bg-editorial-bg rounded border border-editorial-border/20"
+                                  >
+                                    {tmpl}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-[10px] text-editorial-muted italic">No template info</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-6 mt-auto">
+                          <button
+                            onClick={() => {
+                              setSelectedUserId(usr.userId);
+                              setImageSubFilter("ALL");
+                            }}
+                            className="w-full text-center py-2.5 px-4 rounded text-xs font-semibold bg-editorial-ink hover:bg-neutral-800 text-white transition-all shadow-sm group-hover:shadow uppercase tracking-wider font-mono"
+                          >
+                            View Images
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {groupedUsers.length === 0 && (
+                    <div className="col-span-full text-center py-24 text-editorial-muted text-sm italic bg-emerald-50/10 border-2 border-dashed border-editorial-border/40 rounded-xl">
+                      No active users with uploaded images discovered yet. Wait for deployments or trigger backfill.
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* STEP 2: INDIVIDUAL DEPLOYED IMAGES ROW WITH FILTERS */
+                <div className="space-y-6">
+                  {/* Selected User Header Card */}
+                  {(() => {
+                    const selUser = groupedUsers.find(u => u.userId === selectedUserId);
+                    const selUserEmail = selUser?.email || "Unknown User";
+                    const selUserCouple = (selUser?.brideName && selUser?.groomName) 
+                      ? `${selUser.brideName} & ${selUser.groomName}` 
+                      : "";
+                    const displayTitle = selUserCouple || selUserEmail.split("@")[0];
+
+                    const userAllImages = adminImages.filter((img) => (img.userId || "anonymous") === selectedUserId);
+                    const deployImagesCount = userAllImages.filter(img => (img.source || "").toLowerCase() === "deploy").length;
+                    const redeployImagesCount = userAllImages.filter(img => (img.source || "").toLowerCase() === "redeploy").length;
+                    const totalImagesCount = userAllImages.length;
+
+                    return (
+                      <div className="bg-white p-6 rounded-lg border border-editorial-border/40 space-y-4">
+                        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                          <div>
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-12 rounded-full bg-editorial-dark flex items-center justify-center font-serif italic text-base text-white font-bold">
+                                {(selUserEmail || "U").substring(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <h3 className="font-serif italic text-2xl text-editorial-ink leading-tight">{displayTitle}</h3>
+                                <p className="text-xs text-editorial-muted font-mono">{selUserEmail}</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Sub Filtering Tabs */}
+                          <div className="flex flex-wrap gap-1 bg-editorial-bg p-1 rounded-lg border border-editorial-border/40 self-stretch lg:self-auto justify-start lg:justify-end">
+                            {(["ALL", "DEPLOY", "REDEPLOY", "HERO", "GALLERY", "BACKGROUND"] as const).map((flt) => (
+                              <button
+                                key={flt}
+                                onClick={() => setImageSubFilter(flt)}
+                                className={`px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all duration-200 ${
+                                  imageSubFilter === flt
+                                    ? "bg-white text-editorial-ink shadow-sm border border-editorial-border/40"
+                                    : "text-editorial-muted hover:text-editorial-ink hover:bg-white/40"
+                                }`}
+                              >
+                                {flt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Counts Grid: Name, Email, Deploy count, Redeploy count, Image count */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
+                          <div className="bg-editorial-bg p-3 rounded border border-editorial-border/10">
+                            <span className="block text-[10px] text-editorial-muted font-mono uppercase tracking-wider leading-none">Deploy Count</span>
+                            <span className="font-serif italic text-xl font-bold text-editorial-ink mt-1.5 block">{deployImagesCount}</span>
+                          </div>
+                          <div className="bg-editorial-bg p-3 rounded border border-editorial-border/10">
+                            <span className="block text-[10px] text-editorial-muted font-mono uppercase tracking-wider leading-none">Redeploy Count</span>
+                            <span className="font-serif italic text-xl font-bold text-editorial-ink mt-1.5 block">{redeployImagesCount}</span>
+                          </div>
+                          <div className="bg-editorial-bg p-3 rounded border border-editorial-border/10">
+                            <span className="block text-[10px] text-editorial-muted font-mono uppercase tracking-wider leading-none">Image Count</span>
+                            <span className="font-serif italic text-xl font-bold text-editorial-ink mt-1.5 block">{totalImagesCount}</span>
+                          </div>
+                          <div className="bg-editorial-bg p-3 rounded border border-editorial-border/10">
+                            <span className="block text-[10px] text-editorial-muted font-mono uppercase tracking-wider leading-none">Templates Used</span>
+                            <span className="font-mono text-[11px] text-editorial-accent font-semibold mt-1.5 block truncate" title={selUser ? Array.from(selUser.templates).join(", ") : ""}>
+                              {selUser ? Array.from(selUser.templates).join(", ") || "None" : "None"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Images Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {selectedUserImages.map((img) => {
+                      const coupleNames = (img.coupleNames || img.brideName && img.groomName) 
+                        ? `${img.brideName} & ${img.groomName}` 
+                        : img.siteTitle || "Unnamed Couple";
+                      const dateStr = img.uploadedAt 
+                        ? (img.uploadedAt.toDate ? img.uploadedAt.toDate().toLocaleDateString() : new Date(img.uploadedAt).toLocaleDateString())
+                        : "—";
+
+                      return (
+                        <div key={img.id} className="editorial-card bg-white overflow-hidden group flex flex-col justify-between hover:shadow-lg transition-all duration-300">
+                          <div>
+                            {/* Image Preview Container */}
+                            <div className="aspect-square bg-editorial-bg overflow-hidden relative border-b border-editorial-border/30">
+                              <img
+                                src={img.previewUrl || img.imageUrl}
+                                alt={img.fileName || "uploaded user asset"}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800";
+                                }}
+                              />
+                              {/* Image Type Badge */}
+                              <span className="absolute top-2 left-2 text-[10px] uppercase font-bold tracking-wider bg-black/75 text-white/95 px-2 py-0.5 rounded shadow">
+                                {img.imageType || "General"}
+                              </span>
+                              {/* Deploy / Redeploy Badge */}
+                              <span className={`absolute top-2 right-2 text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded shadow text-white ${
+                                (img.source || "").toLowerCase() === "redeploy" ? "bg-amber-600" : "bg-teal-600"
+                              }`}>
+                                {(img.source || "").toLowerCase() === "redeploy" ? "🔁 REDEPLOY" : "🌐 DEPLOY"}
+                              </span>
+                            </div>
+
+                            {/* Text and Details */}
+                            <div className="p-4 space-y-2">
+                              <h4 className="font-serif italic text-base text-editorial-ink leading-tight truncate" title={coupleNames}>
+                                {coupleNames}
+                              </h4>
+                              <p className="text-[11px] font-semibold text-editorial-accent uppercase tracking-wider truncate">
+                                {img.templateName || "Minimalist"}
+                              </p>
+                              <div className="space-y-0.5 pt-1 border-t border-editorial-border/30 font-mono text-[10px] text-editorial-muted">
+                                <span className="block truncate font-medium text-editorial-ink" title={img.fileName}>{img.fileName}</span>
+                                <span>{dateStr}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Card actions */}
+                          <div className="px-4 pb-4 pt-1 flex items-center justify-between gap-2 border-t border-editorial-border/20 mt-auto bg-editorial-bg/10">
+                            {/* Preview button */}
+                            <a
+                              href={img.imageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-1 text-center py-1.5 px-3 rounded text-xs font-semibold bg-editorial-bg hover:bg-editorial-border text-editorial-ink transition-colors"
+                            >
+                              Preview
+                            </a>
+                            {/* Delete button */}
+                            <button
+                              onClick={() => handleDeleteImage(img.id)}
+                              className="py-1.5 px-2.5 rounded text-xs font-semibold bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                              title="Delete image metadata record"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {selectedUserImages.length === 0 && (
+                      <div className="col-span-full text-center py-16 bg-editorial-bg/30 border border-dashed border-editorial-border/40 rounded-xl space-y-3 flex flex-col items-center justify-center">
+                        <p className="text-sm font-serif italic text-editorial-muted">
+                          {imageSubFilter === "REDEPLOY" 
+                            ? "No redeploy images yet" 
+                            : `No ${imageSubFilter.toLowerCase()} images yet`}
+                        </p>
+                        <button
+                          onClick={() => setImageSubFilter("ALL")}
+                          className="inline-flex items-center justify-center text-xs font-semibold bg-editorial-ink hover:bg-neutral-800 text-white px-4 py-2 rounded transition-all font-mono uppercase tracking-wider"
+                        >
+                          Back to ALL
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

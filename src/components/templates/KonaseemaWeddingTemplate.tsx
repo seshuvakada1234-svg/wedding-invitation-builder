@@ -5,12 +5,13 @@
 
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   motion,
   useScroll,
   useTransform,
   useInView,
+  AnimatePresence,
 } from "motion/react";
 import CountdownTimer from "../CountdownTimer";
 import MapPreview from "../MapPreview";
@@ -145,6 +146,7 @@ interface KonaseemaWeddingTemplateProps {
   googleMapsEmbedUrl?: string;
   coordinates?: string;
   coverImage?: string;
+  introVideoUrl?: string; // New prop for video
   events: any[];
   galleryImages: string[];
   story?: string;
@@ -164,6 +166,7 @@ export default function KonaseemaWeddingTemplate({
   googleMapsEmbedUrl = "",
   coordinates = "",
   coverImage,
+  introVideoUrl = "",
   events,
   galleryImages,
   story = "We warmly invite you to join us as we embark on this beautiful journey amidst the lush greens and gentle rivers of Konaseema. Surrounded by heritage and the warmth of family, we seek your presence and blessings.",
@@ -173,6 +176,9 @@ export default function KonaseemaWeddingTemplate({
 }: KonaseemaWeddingTemplateProps) {
   const heroRef = useRef(null);
   const galleryRef = useRef<HTMLDivElement>(null);
+  
+  // State to control intro video visibility
+  const [isInvitationOpen, setIsInvitationOpen] = useState(!introVideoUrl);
 
   const { scrollYProgress } = useScroll({
     target: heroRef,
@@ -197,186 +203,241 @@ export default function KonaseemaWeddingTemplate({
 
   const displayGallery = galleryImages?.length > 0 ? galleryImages : defaultGallery;
 
+  const handleOpenInvitation = () => {
+    setIsInvitationOpen(true);
+  };
+
   return (
-    <div className="min-h-screen bg-[#F0F2F0] overflow-x-hidden">
-      {/* Container */}
-      <div className="w-full max-w-[420px] md:max-w-5xl lg:max-w-6xl mx-auto bg-white shadow-sm md:shadow-2xl relative min-h-screen overflow-hidden">
-
-        {/* ═══════════ HERO ═══════════ */}
-        <section ref={heroRef} className="relative h-[65vh] md:h-[75vh] lg:h-[80vh] flex items-center justify-center overflow-hidden">
-          <motion.div className="absolute inset-0" style={{ scale: enable3D ? heroScale : 1 }}>
-            <TemplateImage
-              image={coverImage}
-              alt="Hero"
-              className="w-full h-full"
-              isEditable={isEditable}
-              onEdit={() => onImageEdit?.("cover")}
-            />
-          </motion.div>
-
-          {enable3D && <SunlightRays />}
+    <>
+      <AnimatePresence mode="wait">
+        {/* ═══════════ INTRO VIDEO SCREEN ═══════════ */}
+        {!isInvitationOpen && introVideoUrl ? (
           <motion.div
-            className="absolute inset-0 bg-gradient-to-b from-[#1B5E20]/30 via-transparent to-white pointer-events-none"
-            style={{ opacity: heroOpacity }}
-          />
-
-          <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-6 pt-12 text-center pointer-events-none">
-            <motion.p
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 }}
-              className="text-white/80 text-[10px] md:text-sm tracking-[0.3em] uppercase mb-4"
-            >
-              The Celebration of
-            </motion.p>
-
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 }}
-              className="text-3xl md:text-7xl lg:text-8xl font-serif text-white drop-shadow-md flex items-center gap-3 md:gap-8"
-            >
-              {brideName}
-              <span className="text-xl md:text-4xl text-[#FBC02D] font-sans not-italic">&amp;</span>
-              {groomName}
-            </motion.h1>
-
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.2 }}
-              className="mt-6 md:mt-10"
-            >
-              <div className="w-16 md:w-24 h-px bg-[#FBC02D]/60 mx-auto mb-4" />
-              <p className="text-[#FBC02D] text-xs md:text-xl font-serif tracking-[0.2em]">{date}</p>
-            </motion.div>
-          </div>
-        </section>
-
-        {/* ═══════════ SAVE THE DATE ═══════════ */}
-        <section className="py-16 md:py-24 bg-[#F9FAF9] text-center">
-          <SectionReveal className="max-w-lg mx-auto px-6">
-            <h2 className="text-sm md:text-lg tracking-[0.3em] uppercase text-[#5D4037]/70 mb-10 font-sans">Save the Date</h2>
+            key="intro-video"
+            className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center cursor-pointer"
+            exit={{ opacity: 0, scale: 1.1 }}
+            transition={{ duration: 1.2, ease: "easeInOut" }}
+          >
+            <video
+              autoPlay
+              muted
+              playsInline
+              className="absolute inset-0 w-full h-full object-cover"
+              src={introVideoUrl}
+            />
             
-            <div className="relative inline-block bg-white border border-[#FBC02D]/20 shadow-xl rounded-2xl p-8 md:p-10">
-              {/* Heart Icon */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 md:w-16 md:h-16 bg-[#FBC02D] rounded-full flex items-center justify-center shadow-lg border-4 border-[#F9FAF9]">
-                <span className="text-white text-2xl md:text-3xl">♥</span>
-              </div>
-              
-              <div className="mt-4">
-                <p className="text-sm md:text-base text-[#5D4037] tracking-[0.2em] font-sans">{month}</p>
-                <p className="text-7xl md:text-9xl font-serif text-[#1B5E20] my-2 leading-none">{day}</p>
-                <p className="text-sm md:text-base text-[#5D4037] tracking-[0.2em] font-sans">{year}</p>
-              </div>
-              
-              <div className="w-12 h-px bg-[#FBC02D] mx-auto my-6 opacity-50" />
-              
-              <p className="text-xs md:text-sm text-[#5D4037]/60 font-serif italic px-4">{venue}</p>
-            </div>
-          </SectionReveal>
-        </section>
+            {/* Subtle dark gradient overlay for text readability */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
 
-        {/* ═══════════ COUNTDOWN ═══════════ */}
-        <section className="bg-white pt-16">
-          <CountdownTimer targetDate={date} theme="traditional" />
-        </section>
-
-        {/* ═══════════ OUR STORY ═══════════ */}
-        <section className="px-6 md:px-12 py-16 md:py-20 lg:py-24 text-center bg-white">
-          <SectionReveal className="max-w-3xl mx-auto">
-            <div className="w-8 md:w-16 h-px bg-[#FBC02D] mx-auto mb-6 opacity-50" />
-            <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20] mb-6 md:mb-8">Our Story</h2>
-            <p className="text-[13px] md:text-lg text-[#5D4037]/70 leading-relaxed max-w-2xl mx-auto">
-              {story}
-            </p>
-            <div className="w-8 md:w-16 h-px bg-[#FBC02D] mx-auto mt-6 opacity-50" />
-          </SectionReveal>
-        </section>
-
-        {/* ═══════════ EVENTS ═══════════ */}
-        <section className="py-16 md:py-20 lg:py-24 bg-[#F9FAF9]">
-          <SectionReveal className="px-6 mb-12 text-center max-w-3xl mx-auto">
-            <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20]">Celebrations</h2>
-            <div className="w-8 md:w-16 h-px bg-[#2E7D32]/30 mx-auto mt-3 md:mt-5" />
-          </SectionReveal>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 px-4 md:px-8 pb-4">
-            {events?.map((ev: any, i: number) => (
+            {/* Open Invitation Button */}
+            <div className="relative z-10 flex flex-col items-center justify-end h-full w-full pb-24 md:pb-32">
               <motion.div
-                key={i}
-                className="w-full min-h-[200px] md:min-h-[280px] rounded-2xl p-6 md:p-8 bg-white border border-[#2E7D32]/10 shadow-md flex flex-col items-center text-center justify-center relative overflow-hidden"
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                viewport={{ once: true }}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 2, duration: 1, ease: "easeOut" }}
               >
-                <div className="w-6 h-px bg-[#FBC02D] mb-4 opacity-40" />
-                <div className="w-full aspect-[16/10] rounded-xl overflow-hidden mb-6 shadow-sm">
+                <button
+                  onClick={handleOpenInvitation}
+                  className="px-10 py-4 bg-[#FBC02D] text-[#1B5E20] font-serif text-xl md:text-2xl rounded-full shadow-2xl hover:bg-[#FFD54F] transition-all transform hover:scale-105 tracking-wider border border-[#FBC02D]/50"
+                >
+                  Open Invitation
+                </button>
+                <p className="text-white/50 text-[10px] md:text-xs mt-4 tracking-widest uppercase text-center">
+                  Click to reveal
+                </p>
+              </motion.div>
+            </div>
+          </motion.div>
+        ) : (
+          /* ═══════════ MAIN TEMPLATE ═══════════ */
+          <motion.div
+            key="main-template"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1.2, ease: "easeInOut" }}
+            className="min-h-screen bg-[#F0F2F0] overflow-x-hidden"
+          >
+            {/* Container */}
+            <div className="w-full max-w-[420px] md:max-w-5xl lg:max-w-6xl mx-auto bg-white shadow-sm md:shadow-2xl relative min-h-screen overflow-hidden">
+
+              {/* ═══════════ HERO ═══════════ */}
+              <section ref={heroRef} className="relative h-[65vh] md:h-[75vh] lg:h-[80vh] flex items-center justify-center overflow-hidden">
+                <motion.div className="absolute inset-0" style={{ scale: enable3D ? heroScale : 1 }}>
                   <TemplateImage
-                    image={ev.image}
-                    alt={ev.name}
+                    image={coverImage}
+                    alt="Hero"
                     className="w-full h-full"
                     isEditable={isEditable}
-                    onEdit={() => onImageEdit?.("event", i)}
+                    onEdit={() => onImageEdit?.("cover")}
                   />
-                </div>
-                <h3 className="text-md md:text-2xl font-serif text-[#1B5E20] mb-2">{ev.name}</h3>
-                <div className="w-6 md:w-10 h-px bg-[#FBC02D] mx-auto mb-3 opacity-40" />
-                <p className="text-[11px] md:text-sm font-semibold text-[#5D4037] mb-1">{ev.date}</p>
-                <p className="text-[10px] md:text-xs text-[#5D4037]/60 mb-3">{ev.time}</p>
-                <p className="text-[9px] md:text-[10px] uppercase tracking-widest font-bold text-[#1B5E20]/50">{ev.location}</p>
-              </motion.div>
-            ))}
-          </div>
-        </section>
+                </motion.div>
 
-        {/* ═══════════ GALLERY ═══════════ */}
-        <section className="py-16 md:py-20 lg:py-24 bg-white">
-          <SectionReveal className="px-6 mb-12 text-center text-lg md:text-4xl font-serif italic text-[#1B5E20] max-w-3xl mx-auto">
-            Moments Captured
-          </SectionReveal>
-
-          <div ref={galleryRef}
-               className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-6 md:px-12 pb-2">
-            {displayGallery.map((src, i) => (
-              <div key={i} className={`w-full aspect-[4/5] rounded-xl overflow-hidden shadow-md ${i === 0 ? 'col-span-1 sm:col-span-2' : ''}`}>
-                <TemplateImage 
-                  image={src} 
-                  alt="" 
-                  className="w-full h-full" 
-                  isEditable={isEditable}
-                  onEdit={() => onImageEdit?.("gallery", i)}
+                {enable3D && <SunlightRays />}
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-b from-[#1B5E20]/30 via-transparent to-white pointer-events-none"
+                  style={{ opacity: heroOpacity }}
                 />
-              </div>
-            ))}
-          </div>
-        </section>
 
-        {/* ═══════════ LOCATION & MAP ═══════════ */}
-        <section className="px-6 md:px-12 py-16 md:py-20 lg:py-24 bg-[#F9FAF9]">
-          <div className="max-w-4xl mx-auto">
-            <SectionReveal className="text-center mb-10">
-              <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20]">The Venue</h2>
-              <p className="text-[11px] md:text-lg text-[#5D4037]/60 mt-4 leading-relaxed">{venue}</p>
-            </SectionReveal>
+                <div className="absolute inset-0 flex flex-col items-center justify-center z-10 px-6 pt-12 text-center pointer-events-none">
+                  <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.6 }}
+                    className="text-white/80 text-[10px] md:text-sm tracking-[0.3em] uppercase mb-4"
+                  >
+                    The Celebration of
+                  </motion.p>
 
-            <SectionReveal>
-              <MapPreview mapInput={googleMapsEmbedUrl || coordinates || googleMapsLink || venueAddress} />
-            </SectionReveal>
-          </div>
-        </section>
+                  <motion.h1
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 }}
+                    className="text-3xl md:text-7xl lg:text-8xl font-serif text-white drop-shadow-md flex items-center gap-3 md:gap-8"
+                  >
+                    {brideName}
+                    <span className="text-xl md:text-4xl text-[#FBC02D] font-sans not-italic">&amp;</span>
+                    {groomName}
+                  </motion.h1>
 
-        {/* ═══════════ FOOTER ═══════════ */}
-        <footer className="px-6 py-24 md:py-36 bg-[#0D3B12] text-center relative overflow-hidden">
-          <SectionReveal>
-            <RangoliSVG color="#FBC02D" size={80} className="mx-auto mb-8 opacity-20 md:w-32 md:h-32" />
-            <p className="text-[#FBC02D] font-serif italic text-2xl md:text-5xl mb-4">See You There!</p>
-            <p className="text-white/20 text-[9px] md:text-xs uppercase tracking-[0.4em]">Wedding Invitation Cinematic Suites</p>
-          </SectionReveal>
-        </footer>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1.2 }}
+                    className="mt-6 md:mt-10"
+                  >
+                    <div className="w-16 md:w-24 h-px bg-[#FBC02D]/60 mx-auto mb-4" />
+                    <p className="text-[#FBC02D] text-xs md:text-xl font-serif tracking-[0.2em]">{date}</p>
+                  </motion.div>
+                </div>
+              </section>
 
-      </div>
-    </div>
+              {/* ═══════════ SAVE THE DATE ═══════════ */}
+              <section className="py-16 md:py-24 bg-[#F9FAF9] text-center">
+                <SectionReveal className="max-w-lg mx-auto px-6">
+                  <h2 className="text-sm md:text-lg tracking-[0.3em] uppercase text-[#5D4037]/70 mb-10 font-sans">Save the Date</h2>
+                  
+                  <div className="relative inline-block bg-white border border-[#FBC02D]/20 shadow-xl rounded-2xl p-8 md:p-10">
+                    {/* Heart Icon */}
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-14 h-14 md:w-16 md:h-16 bg-[#FBC02D] rounded-full flex items-center justify-center shadow-lg border-4 border-[#F9FAF9]">
+                      <span className="text-white text-2xl md:text-3xl">♥</span>
+                    </div>
+                    
+                    <div className="mt-4">
+                      <p className="text-sm md:text-base text-[#5D4037] tracking-[0.2em] font-sans">{month}</p>
+                      <p className="text-7xl md:text-9xl font-serif text-[#1B5E20] my-2 leading-none">{day}</p>
+                      <p className="text-sm md:text-base text-[#5D4037] tracking-[0.2em] font-sans">{year}</p>
+                    </div>
+                    
+                    <div className="w-12 h-px bg-[#FBC02D] mx-auto my-6 opacity-50" />
+                    
+                    <p className="text-xs md:text-sm text-[#5D4037]/60 font-serif italic px-4">{venue}</p>
+                  </div>
+                </SectionReveal>
+              </section>
+
+              {/* ═══════════ COUNTDOWN ═══════════ */}
+              <section className="bg-white pt-16">
+                <CountdownTimer targetDate={date} theme="traditional" />
+              </section>
+
+              {/* ═══════════ OUR STORY ═══════════ */}
+              <section className="px-6 md:px-12 py-16 md:py-20 lg:py-24 text-center bg-white">
+                <SectionReveal className="max-w-3xl mx-auto">
+                  <div className="w-8 md:w-16 h-px bg-[#FBC02D] mx-auto mb-6 opacity-50" />
+                  <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20] mb-6 md:mb-8">Our Story</h2>
+                  <p className="text-[13px] md:text-lg text-[#5D4037]/70 leading-relaxed max-w-2xl mx-auto">
+                    {story}
+                  </p>
+                  <div className="w-8 md:w-16 h-px bg-[#FBC02D] mx-auto mt-6 opacity-50" />
+                </SectionReveal>
+              </section>
+
+              {/* ═══════════ EVENTS ═══════════ */}
+              <section className="py-16 md:py-20 lg:py-24 bg-[#F9FAF9]">
+                <SectionReveal className="px-6 mb-12 text-center max-w-3xl mx-auto">
+                  <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20]">Celebrations</h2>
+                  <div className="w-8 md:w-16 h-px bg-[#2E7D32]/30 mx-auto mt-3 md:mt-5" />
+                </SectionReveal>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 px-4 md:px-8 pb-4">
+                  {events?.map((ev: any, i: number) => (
+                    <motion.div
+                      key={i}
+                      className="w-full min-h-[200px] md:min-h-[280px] rounded-2xl p-6 md:p-8 bg-white border border-[#2E7D32]/10 shadow-md flex flex-col items-center text-center justify-center relative overflow-hidden"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: i * 0.1 }}
+                      viewport={{ once: true }}
+                    >
+                      <div className="w-6 h-px bg-[#FBC02D] mb-4 opacity-40" />
+                      <div className="w-full aspect-[16/10] rounded-xl overflow-hidden mb-6 shadow-sm">
+                        <TemplateImage
+                          image={ev.image}
+                          alt={ev.name}
+                          className="w-full h-full"
+                          isEditable={isEditable}
+                          onEdit={() => onImageEdit?.("event", i)}
+                        />
+                      </div>
+                      <h3 className="text-md md:text-2xl font-serif text-[#1B5E20] mb-2">{ev.name}</h3>
+                      <div className="w-6 md:w-10 h-px bg-[#FBC02D] mx-auto mb-3 opacity-40" />
+                      <p className="text-[11px] md:text-sm font-semibold text-[#5D4037] mb-1">{ev.date}</p>
+                      <p className="text-[10px] md:text-xs text-[#5D4037]/60 mb-3">{ev.time}</p>
+                      <p className="text-[9px] md:text-[10px] uppercase tracking-widest font-bold text-[#1B5E20]/50">{ev.location}</p>
+                    </motion.div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ═══════════ GALLERY ═══════════ */}
+              <section className="py-16 md:py-20 lg:py-24 bg-white">
+                <SectionReveal className="px-6 mb-12 text-center text-lg md:text-4xl font-serif italic text-[#1B5E20] max-w-3xl mx-auto">
+                  Moments Captured
+                </SectionReveal>
+
+                <div ref={galleryRef}
+                     className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-6 md:px-12 pb-2">
+                  {displayGallery.map((src, i) => (
+                    <div key={i} className={`w-full aspect-[4/5] rounded-xl overflow-hidden shadow-md ${i === 0 ? 'col-span-1 sm:col-span-2' : ''}`}>
+                      <TemplateImage 
+                        image={src} 
+                        alt="" 
+                        className="w-full h-full" 
+                        isEditable={isEditable}
+                        onEdit={() => onImageEdit?.("gallery", i)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* ═══════════ LOCATION & MAP ═══════════ */}
+              <section className="px-6 md:px-12 py-16 md:py-20 lg:py-24 bg-[#F9FAF9]">
+                <div className="max-w-4xl mx-auto">
+                  <SectionReveal className="text-center mb-10">
+                    <h2 className="text-lg md:text-4xl font-serif italic text-[#1B5E20]">The Venue</h2>
+                    <p className="text-[11px] md:text-lg text-[#5D4037]/60 mt-4 leading-relaxed">{venue}</p>
+                  </SectionReveal>
+
+                  <SectionReveal>
+                    <MapPreview mapInput={googleMapsEmbedUrl || coordinates || googleMapsLink || venueAddress} />
+                  </SectionReveal>
+                </div>
+              </section>
+
+              {/* ═══════════ FOOTER ═══════════ */}
+              <footer className="px-6 py-24 md:py-36 bg-[#0D3B12] text-center relative overflow-hidden">
+                <SectionReveal>
+                  <RangoliSVG color="#FBC02D" size={80} className="mx-auto mb-8 opacity-20 md:w-32 md:h-32" />
+                  <p className="text-[#FBC02D] font-serif italic text-2xl md:text-5xl mb-4">See You There!</p>
+                  <p className="text-white/20 text-[9px] md:text-xs uppercase tracking-[0.4em]">Wedding Invitation Cinematic Suites</p>
+                </SectionReveal>
+              </footer>
+
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

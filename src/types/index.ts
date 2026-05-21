@@ -28,6 +28,7 @@ export interface TemplateDraft {
   brideName: string;
   groomName: string;
   weddingDate: string;
+  weddingTime?: string;
   location: string;
   coverImage?: string | EditableImage;
   coverImageKey?: string;
@@ -89,7 +90,7 @@ export interface TemplateDraft {
   modalLabel?: string;
 }
 
-export interface WeddingInvite {
+export interface WeddingInvite extends Partial<TemplateDraft> {
   id: string;
   slug: string;
   userId: string;
@@ -116,9 +117,17 @@ export interface WeddingInvite {
   brideName: string;
   groomName: string;
   weddingDate: string;
+  weddingTime?: string;
   location: string;
   template: TemplateType; // Keep for compatibility with existing code
   coverImage?: string | EditableImage;
+  views?: number;
+  freeViews?: number;
+  published?: boolean;
+  hasUnpublishedChanges?: boolean;
+  isPaid?: boolean;
+  viewLimit?: number;
+  limitExceeded?: boolean;
 }
 
 export interface UserProfile {

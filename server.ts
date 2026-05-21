@@ -114,6 +114,165 @@ function calculateFreeViews(price: number) {
   return 500;
 }
 
+function getTemplateName(templateId: any): string {
+  if (!templateId) return "Minimalist";
+  const names: Record<string, string> = {
+    "royal-wedding": "Indian Royal Wedding",
+    "konaseema": "Konaseema Heritage",
+    "kerala-wedding": "Kerala Wedding",
+    "kerala-envelope-reveal": "Kerala Envelope Reveal",
+    "housewarming-south": "South Indian Housewarming",
+    "south-india": "South India Royal Lavender",
+    "all_access": "All Access Plan",
+    "minimal": "Minimalist"
+  };
+  const key = String(templateId).toLowerCase().trim();
+  return names[key] || templateId;
+}
+
+function extractUserUploadedUrls(obj: any): { url: string; fieldName: string }[] {
+  const urls: { url: string; fieldName: string }[] = [];
+  const visited = new Set();
+
+  function walk(node: any, path: string) {
+    if (!node || typeof node !== "object") return;
+    if (visited.has(node)) return;
+    visited.add(node);
+
+    for (const [key, val] of Object.entries(node)) {
+      if (typeof val === "string") {
+        if (val.startsWith("http://") || val.startsWith("https://")) {
+          if (val.includes("/users/") || val.includes("r2.") || val.includes(".r2") || val.includes("catp-media") || val.includes("/wedding-invitations/")) {
+            urls.push({ url: val, fieldName: key });
+          }
+        }
+      } else if (typeof val === "object" && val !== null) {
+        walk(val, path ? `${path}.${key}` : key);
+      }
+    }
+  }
+
+  walk(obj, "");
+  return urls;
+}
+
+function mapFieldToImageType(fieldName: string): string {
+  const fn = fieldName.toLowerCase();
+  if (fn.includes("cover")) return "cover";
+  if (fn.includes("hero") || fn === "image" || fn === "coupleimage") return "hero";
+  if (fn.includes("gallery")) return "gallery";
+  if (fn.includes("event") || fn === "img") return "event";
+  if (fn.includes("timeline") || fn.includes("story")) return "story";
+  if (fn.includes("intro") || fn.includes("thumb")) return "intro";
+  if (fn.includes("bg") || fn.includes("background")) return "background";
+  if (fn.includes("monogram")) return "monogram";
+  return fieldName || "general";
+}
+
+function getPublicCdnUrl(url: string): string {
+  if (!url) return "";
+  const trimmed = url.trim();
+
+  let publicUrl = (process.env.R2_PUBLIC_URL || "").trim().replace(/^["'](.+)["']$/, "$1").replace(/\/$/, "");
+  if (publicUrl && !publicUrl.startsWith("http://") && !publicUrl.startsWith("https://")) {
+    publicUrl = `https://${publicUrl}`;
+  }
+
+  // If no publicUrl is configured in environment, we cannot rewrite. Return sanitized/as-is.
+  if (!publicUrl) {
+    return trimmed;
+  }
+
+  // Rewrite private, signed, or localhost R2 cloudflarestorage endpoint URLs to public CDN
+  if (
+    trimmed.includes(".r2.cloudflarestorage.com") ||
+    trimmed.includes(".r2.dev") ||
+    trimmed.includes("r2.cloudflarestorage.com") ||
+    trimmed.includes("localhost") ||
+    trimmed.includes("127.0.0.1")
+  ) {
+    const urlParts = trimmed.split("/");
+    const usersIndex = urlParts.indexOf("users");
+    if (usersIndex !== -1) {
+      const key = urlParts.slice(usersIndex).join("/");
+      return `${publicUrl}/${key}`;
+    }
+  }
+
+  if (trimmed.includes("/invitation-images/")) {
+    const parts = trimmed.split("/invitation-images/");
+    if (parts[1]) {
+      return `${publicUrl}/${parts[1].replace(/^\//, "")}`;
+    }
+  }
+
+  if (trimmed.startsWith("users/")) {
+    return `${publicUrl}/${trimmed}`;
+  }
+
+  return trimmed;
+}
+
+async function syncAdminImages(db: any, inviteId: string, inviteData: any, source: "deploy" | "redeploy") {
+  try {
+    const templateId = inviteData.template || "minimal";
+    const templateName = getTemplateName(templateId);
+    const latestDraft = inviteData.draftData || {};
+    const brideName = inviteData.brideName || latestDraft?.brideName || "";
+    const groomName = inviteData.groomName || latestDraft?.groomName || "";
+    const email = inviteData.email || null;
+    const userId = inviteData.userId || null;
+
+    // Extract all uploaded URLs from the full invitation doc (both root and draftData/publishedData)
+    const uploadedUrls = extractUserUploadedUrls(inviteData);
+    if (uploadedUrls.length === 0) return;
+
+    const batch = db.batch();
+    let count = 0;
+
+    for (const item of uploadedUrls) {
+      const { url, fieldName } = item;
+      const publicCdnUrl = getPublicCdnUrl(url);
+      if (!publicCdnUrl) continue;
+
+      const urlParts = publicCdnUrl.split("/");
+      const fileName = urlParts[urlParts.length - 1] || "image.jpg";
+      const imageType = mapFieldToImageType(fieldName);
+
+      // Create unique deterministic ID based on the normalized public URL to prevent duplicates
+      const docId = `img_${crypto.createHash("sha256").update(publicCdnUrl).digest("hex")}`;
+      const imgRef = db.collection("adminImages").doc(docId);
+
+      const docData = {
+        userId,
+        email,
+        invitationId: inviteId,
+        templateId,
+        templateName,
+        brideName,
+        groomName,
+        imageType,
+        imageUrl: publicCdnUrl,
+        previewUrl: publicCdnUrl,
+        cdnUrl: publicCdnUrl,
+        fileName,
+        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+        source
+      };
+
+      batch.set(imgRef, docData, { merge: true });
+      count++;
+    }
+
+    if (count > 0) {
+      await batch.commit();
+      console.log(`Synced ${count} images for invite ${inviteId} to adminImages`);
+    }
+  } catch (err) {
+    console.error("syncAdminImages error:", err);
+  }
+}
+
 /**
  * Normalizes image fields in the invitation data to ensure they use public CDN URLs.
  * Detects blob URLs or broken internal storage paths and replaces them with public ones if possible.
@@ -380,6 +539,196 @@ async function startServer() {
       }
     });
 
+    // ── Admin: Backfill Payments ──────────────────────────────────────────────
+    app.post("/api/admin/backfill-payments", async (req, res) => {
+      try {
+        await verifyAdmin(req);
+        const db = getAdminDb();
+        if (!db) throw new Error("DB error");
+
+        const paymentsSnapshot = await db.collection("payments").get();
+        let backfilledCount = 0;
+
+        const invitesCache: Record<string, any> = {};
+
+        for (const paymentDoc of paymentsSnapshot.docs) {
+          const pData = paymentDoc.data();
+          const pId = paymentDoc.id;
+          const pType = (pData.paymentType || pData.type || "deploy").toLowerCase().trim();
+
+          const isMissingMetadata = 
+            pType === "redeploy" && (
+              !pData.slug || 
+              !pData.brideName || 
+              !pData.groomName || 
+              !pData.email ||
+              !pData.templateId ||
+              !pData.templateName ||
+              !pData.siteTitle
+            );
+
+          if (isMissingMetadata) {
+            const inviteId = pData.invitationId || pData.inviteId;
+            if (!inviteId) continue;
+
+            let inviteData = invitesCache[inviteId];
+            if (!inviteData) {
+              const inviteSnap = await db.collection("invites").doc(inviteId).get();
+              if (inviteSnap.exists) {
+                inviteData = inviteSnap.data()!;
+                invitesCache[inviteId] = inviteData;
+              }
+            }
+
+            if (inviteData) {
+              const latestDraft = inviteData.draftData || {};
+              const templateId = pData.templateId || inviteData.template || "minimal";
+              const templateName = pData.templateName || getTemplateName(templateId);
+              const brideName = pData.brideName || inviteData.brideName || latestDraft?.brideName || "";
+              const groomName = pData.groomName || inviteData.groomName || latestDraft?.groomName || "";
+              const siteTitle = pData.siteTitle || (brideName && groomName ? `${brideName} & ${groomName}` : "");
+              const slug = pData.slug || inviteData.slug || "";
+              const email = pData.email || inviteData.email || null;
+              const viewsUsed = pData.viewsUsed !== undefined ? pData.viewsUsed : (inviteData.viewsUsed || 0);
+              const viewsLimit = pData.viewsLimit !== undefined ? pData.viewsLimit : (inviteData.viewsLimit || inviteData.viewLimit || inviteData.freeViews || 500);
+
+              const updateObj: Record<string, any> = {
+                templateId,
+                templateName,
+                brideName,
+                groomName,
+                siteTitle,
+                slug,
+                email,
+                viewsUsed,
+                viewsLimit
+              };
+
+              await db.collection("payments").doc(pId).update(updateObj);
+              backfilledCount++;
+            }
+          }
+        }
+
+        res.json({ success: true, backfilledCount });
+      } catch (error: any) {
+        console.error("Backfill payments failed:", error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // ── Admin: Backfill Images ──────────────────────────────────────────────
+    app.post("/api/admin/backfill-images", async (req, res) => {
+      try {
+        await verifyAdmin(req);
+        const db = getAdminDb();
+        if (!db) throw new Error("DB error");
+
+        const invitesSnapshot = await db.collection("invites").get();
+        let processedCount = 0;
+
+        for (const inviteDoc of invitesSnapshot.docs) {
+          const inviteData = inviteDoc.data();
+          const inviteId = inviteDoc.id;
+          await syncAdminImages(db, inviteId, inviteData, "deploy");
+          processedCount++;
+        }
+
+        // Additionally, scan existing adminImages collection to clean up and backfill old records with public URLs
+        const adminImagesSnap = await db.collection("adminImages").get();
+        let imageCleanedCount = 0;
+
+        for (const imgDoc of adminImagesSnap.docs) {
+          const imgData = imgDoc.data();
+          let changed = false;
+          
+          if (imgData.imageUrl) {
+            const currentUrl = imgData.imageUrl;
+            const newUrl = getPublicCdnUrl(currentUrl);
+            if (newUrl !== currentUrl) {
+              imgData.imageUrl = newUrl;
+              imgData.previewUrl = newUrl;
+              imgData.cdnUrl = newUrl;
+              changed = true;
+            }
+          }
+          if (imgData.previewUrl) {
+            const currentUrl = imgData.previewUrl;
+            const newUrl = getPublicCdnUrl(currentUrl);
+            if (newUrl !== currentUrl) {
+              imgData.previewUrl = newUrl;
+              changed = true;
+            }
+          }
+          if (imgData.cdnUrl) {
+            const currentUrl = imgData.cdnUrl;
+            const newUrl = getPublicCdnUrl(currentUrl);
+            if (newUrl !== currentUrl) {
+              imgData.cdnUrl = newUrl;
+              changed = true;
+            }
+          }
+          
+          // Set default fields if missing
+          const fallbackUrl = getPublicCdnUrl(imgData.imageUrl || "");
+          if (fallbackUrl) {
+            if (!imgData.previewUrl) {
+              imgData.previewUrl = fallbackUrl;
+              changed = true;
+            }
+            if (!imgData.cdnUrl) {
+              imgData.cdnUrl = fallbackUrl;
+              changed = true;
+            }
+          }
+
+          if (changed) {
+            await db.collection("adminImages").doc(imgDoc.id).set(imgData, { merge: true });
+            imageCleanedCount++;
+          }
+        }
+
+        res.json({ success: true, processedCount, imageCleanedCount });
+      } catch (error: any) {
+        console.error("Backfill images failed:", error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // ── Admin: All Images ────────────────────────────────────────────────────
+    app.get("/api/admin/all-images", async (req, res) => {
+      try {
+        await verifyAdmin(req);
+        const db = getAdminDb();
+        if (!db) throw new Error("DB error");
+
+        const snapshot = await db.collection("adminImages").orderBy("uploadedAt", "desc").get();
+        const images = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...serializeFirestoreData(doc.data()),
+        }));
+
+        res.json({ success: true, images });
+      } catch (error: any) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
+    // ── Admin: Delete Image Record ──────────────────────────────────────────
+    app.delete("/api/admin/image/:id", async (req, res) => {
+      try {
+        await verifyAdmin(req);
+        const db = getAdminDb();
+        if (!db) throw new Error("DB error");
+        
+        await db.collection("adminImages").doc(req.params.id).delete();
+        res.json({ success: true });
+      } catch (error: any) {
+        console.error("Delete image record failed:", error);
+        res.status(500).json({ success: false, error: error.message });
+      }
+    });
+
     // ── Admin: All Invites ────────────────────────────────────────────────────
     app.get("/api/admin/all-invites", async (req, res) => {
       try {
@@ -484,6 +833,7 @@ async function startServer() {
       }
 
       await db.collection("invites").doc(id).set(inviteData, { merge: true });
+      await syncAdminImages(db, id, inviteData, "deploy");
       res.json({ success: true });
     } catch (error: any) {
       console.error("Save invite error:", error);
@@ -517,6 +867,11 @@ async function startServer() {
         redeployAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+
+      const updatedSnap = await inviteRef.get();
+      if (updatedSnap.exists) {
+        await syncAdminImages(db, id, updatedSnap.data(), "redeploy");
+      }
 
       res.json({ success: true });
     } catch (error: any) {
@@ -582,25 +937,54 @@ async function startServer() {
 
       const inviteData = inviteSnap.data()!;
       const latestDraft = inviteData.draftData;
+      const newRedeployCount = (inviteData.redeployCount || 0) + 1;
 
       // Update the published live data with the draft
       await inviteRef.update({
         publishedData: latestDraft,
         hasUnpublishedChanges: false,
+        lastPublishedAt: admin.firestore.FieldValue.serverTimestamp(),
         redeployAt: admin.firestore.FieldValue.serverTimestamp(),
+        redeployCount: admin.firestore.FieldValue.increment(1),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
       // Record payment
+      const templateId = inviteData.template || "minimal";
+      const templateName = getTemplateName(templateId);
+      const brideName = inviteData.brideName || latestDraft?.brideName || "";
+      const groomName = inviteData.groomName || latestDraft?.groomName || "";
+      const siteTitle = brideName && groomName ? `${brideName} & ${groomName}` : "";
+      const slug = inviteData.slug || "";
+      const email = inviteData.email || null;
+      const viewsUsed = inviteData.viewsUsed || 0;
+      const viewsLimit = inviteData.viewsLimit || inviteData.viewLimit || inviteData.freeViews || 500;
+
       await db.collection("payments").add({
-        userId: tokenUserId,
-        inviteId,
-        type: "redeploy",
+        paymentType: "redeploy",
         amount: 99,
+        userId: tokenUserId,
+        email,
+        invitationId: inviteId,
+        slug,
+        templateId,
+        templateName,
+        brideName,
+        groomName,
+        siteTitle,
+        viewsUsed,
+        viewsLimit,
         razorpayPaymentId: razorpay_payment_id,
         razorpayOrderId: razorpay_order_id,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        redeployCount: newRedeployCount,
+        status: "paid"
       });
+
+      const updatedSnap = await inviteRef.get();
+      if (updatedSnap.exists) {
+        await syncAdminImages(db, inviteId, updatedSnap.data(), "redeploy");
+      }
 
       res.json({ success: true });
     } catch (error: any) {
@@ -793,15 +1177,36 @@ async function startServer() {
       const inviteSnap = await inviteRef.get();
       if (!inviteSnap.exists) return res.status(404).json({ success: false, error: "Invite not found" });
 
-      const currentLimit = inviteSnap.data()?.viewLimit || inviteSnap.data()?.freeViews || 500;
+      const inviteData = inviteSnap.data()!;
+      const currentLimit = inviteData.viewLimit || inviteData.freeViews || 500;
       await inviteRef.update({
         viewLimit: currentLimit + 1000,
         limitExceeded: false,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
+      // Record detailed payment
+      const templateId = inviteData.template || "minimal";
+      const templateName = getTemplateName(templateId);
+
+      await db.collection("payments").add({
+        userId,
+        email: inviteData.email || null,
+        templateId,
+        templateName,
+        paymentType: "topup",
+        amount: 99,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        invitationId: inviteId,
+        viewsAdded: 1000,
+        status: "paid"
+      });
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Verify topup error:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -843,18 +1248,58 @@ async function startServer() {
 
       const inviteRef = db.collection("invites").doc(inviteId);
       const inviteSnap = await inviteRef.get();
-      if (!inviteSnap.exists) return res.status(404).json({ success: false, error: "Invite not found" });
+      if (!inviteSnap.exists || inviteSnap.data()?.userId !== userId) {
+        return res.status(403).json({ success: false, error: "Access denied" });
+      }
+
+      const inviteData = inviteSnap.data()!;
+      const latestDraft = inviteData.draftData;
+      const newRedeployCount = (inviteData.redeployCount || 0) + 1;
 
       await inviteRef.update({
         hasUnpublishedChanges: false,
         lastPublishedAt: admin.firestore.FieldValue.serverTimestamp(),
-        publishedData: inviteSnap.data()?.draftData, // Transfer draft to live
+        redeployAt: admin.firestore.FieldValue.serverTimestamp(),
+        publishedData: latestDraft, // Transfer draft to live
         redeployCount: admin.firestore.FieldValue.increment(1),
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
+      // Record payment
+      const templateId = inviteData.template || "minimal";
+      const templateName = getTemplateName(templateId);
+      const brideName = inviteData.brideName || latestDraft?.brideName || "";
+      const groomName = inviteData.groomName || latestDraft?.groomName || "";
+      const siteTitle = brideName && groomName ? `${brideName} & ${groomName}` : "";
+      const slug = inviteData.slug || "";
+      const email = inviteData.email || null;
+      const viewsUsed = inviteData.viewsUsed || 0;
+      const viewsLimit = inviteData.viewsLimit || inviteData.viewLimit || inviteData.freeViews || 500;
+
+      await db.collection("payments").add({
+        paymentType: "redeploy",
+        amount: 99,
+        userId,
+        email,
+        invitationId: inviteId,
+        slug,
+        templateId,
+        templateName,
+        brideName,
+        groomName,
+        siteTitle,
+        viewsUsed,
+        viewsLimit,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpayOrderId: razorpay_order_id,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        redeployCount: newRedeployCount,
+        status: "paid"
+      });
+
       res.json({ success: true });
     } catch (error: any) {
+      console.error("Verify redeploy error 2:", error);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -1049,16 +1494,33 @@ async function startServer() {
            console.error("Error updating invite freeViews:", eInvites);
         }
 
+        let invitationId = null;
+        try {
+          const checkInvites = await db.collection("invites")
+            .where("userId", "==", confirmedUserId)
+            .where("template", "==", templateId || "minimal")
+            .limit(1)
+            .get();
+          if (!checkInvites.empty) {
+            invitationId = checkInvites.docs[0].id;
+          }
+        } catch (eInvKey) {
+          console.warn("Could not find invite ID for payment analytics:", eInvKey);
+        }
+
         // ✅ Create detailed payment record for analytics
         await db.collection("payments").add({
           userId: confirmedUserId,
           email: email || null,
           templateId: templateId || "minimal",
+          templateName: getTemplateName(templateId),
+          paymentType: "deploy",
           amount: paymentAmount,
           status: "paid",
           razorpayPaymentId: razorpay_payment_id,
           razorpayOrderId: razorpay_order_id,
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          invitationId
         });
 
         console.log("Payment verified and saved for user:", confirmedUserId, "Template:", templateId);

@@ -218,13 +218,7 @@ export default function TemplatesPage() {
                     )}
                   </div>
 
-                  {(tpl.category === 'premium' || tpl.id === 'south-india') && (
-                    <div className="absolute top-6 left-6">
-                      <span className="bg-editorial-accent text-white px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-widest">
-                        Signature
-                      </span>
-                    </div>
-                  )}
+
                 </div>
               </motion.div>
             );

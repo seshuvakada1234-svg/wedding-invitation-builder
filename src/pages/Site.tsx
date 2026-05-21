@@ -2,8 +2,6 @@ import { useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { getTemplateById } from "../templates";
 import SEO from "../components/SEO";
-import LoadingScreen from "../components/LoadingScreen";
-import ErrorScreen from "../components/ErrorScreen";
 import { db } from "../lib/firebase";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { Eye } from "lucide-react";
@@ -101,6 +99,7 @@ export default function Site() {
         brideName={d.brideName || ""}
         groomName={d.groomName || ""}
         date={d.weddingDate || ""}
+        weddingTime={d.weddingTime || ""}
         venue={d.location || ""}
         venueAddress={d.venueAddress}
         venueCity={d.venueCity}
@@ -125,6 +124,16 @@ export default function Site() {
         hosts={{ primary: d.brideName || "", secondary: d.groomName || "" }}
         address={d.venueAddress || d.location}
         image={typeof d.coverImage === 'string' ? d.coverImage : (d.coverImage?.url || "")}
+        // Theme & Identity
+        coupleNickname={d.coupleNickname}
+        familyNames={d.familyNames}
+        weddingHashtag={d.weddingHashtag}
+        heroTitle={d.heroTitle}
+        heroSubtitle={d.heroSubtitle}
+        musicUrl={d.musicUrl}
+        rsvpDeadline={d.rsvpDeadline}
+        whatsappNumber={d.whatsappNumber}
+        isPaid={true} // Site is live
       />
     </>
   );

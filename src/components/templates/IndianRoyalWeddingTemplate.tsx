@@ -426,12 +426,16 @@ function NavyFloralSeal({ size = 60 }: { size?: number }) {
   );
 }
 
+import { formatWeddingDate, formatWeddingTime } from '../../lib/dateUtils';
+
 // ─── HERO ──────────────────────────────────────────────────────────────────
-const HeroSection = ({ brideName, groomName, date, venue, coverImage, isEditable, onImageEdit }: any) => {
+const HeroSection = ({ brideName, groomName, date, weddingTime, venue, coverImage, isEditable, onImageEdit }: any) => {
   const cd = useCountdown(date);
+  const formattedDate = useMemo(() => formatWeddingDate(date), [date]);
+  const formattedTime = useMemo(() => formatWeddingTime(weddingTime), [weddingTime]);
+
   return (
-    <section
-      id="hero"
+    <section id="hero"
       className="relative w-full overflow-hidden"
       style={{ minHeight: 'clamp(560px, 85svh, 100svh)' }}
     >
@@ -521,7 +525,11 @@ const HeroSection = ({ brideName, groomName, date, venue, coverImage, isEditable
             <div
               className="text-white font-playfair font-bold tracking-[0.06em]"
               style={{ fontSize: 'clamp(0.9rem, 2.5vw, 1.6rem)', textShadow: '0 2px 8px rgba(0,0,0,0.25)' }}
-            >{date}</div>
+            >{formattedDate}</div>
+            <div
+               className="text-white/80 font-serif font-medium tracking-wider mb-2"
+               style={{ fontSize: 'clamp(0.75rem, 1.8vw, 1rem)' }}
+            >{formattedTime}</div>
             {/* FIX: min-w-0 on the flex container + overflow-hidden on the text span */}
             <div className="flex items-center justify-center gap-2 text-white/90 font-medium px-1 max-w-full overflow-hidden">
               <MapPin className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#D4AF37] flex-shrink-0" />
@@ -569,7 +577,7 @@ const HeroSection = ({ brideName, groomName, date, venue, coverImage, isEditable
 };
 
 // ─── INVITATION MESSAGE ────────────────────────────────────────────────────
-const InvitationMessage = ({ brideName, groomName, date, location }: any) => (
+const InvitationMessage = ({ brideName, groomName, date, weddingTime, location }: any) => (
   <section className="py-12 md:py-20 lg:py-32 px-4 sm:px-6 md:px-10 lg:px-16 bg-[#F5F5F5] gpu">
     <div className="max-w-3xl mx-auto sr">
       <div className="relative bg-white p-6 sm:p-8 md:p-12 lg:p-16 rounded-2xl sm:rounded-3xl shadow-xl overflow-hidden"
@@ -600,7 +608,7 @@ const InvitationMessage = ({ brideName, groomName, date, location }: any) => (
           </p>
           <p className="font-inter text-[#1F2A44]/60 mt-2 sm:mt-4 tracking-[0.06em] font-medium uppercase"
             style={{ fontSize: 'clamp(0.65rem, 1.6vw, 0.95rem)' }}>
-            {date} <span className="mx-2 opacity-30">|</span> {location || 'Mumbai'}
+            {formatWeddingDate(date)} <span className="mx-2 opacity-30">|</span> {formatWeddingTime(weddingTime)} <span className="mx-2 opacity-30">|</span> {location || 'Mumbai'}
           </p>
         </div>
       </div>
@@ -674,7 +682,7 @@ const OurStory = ({ brideName, groomName, story, isEditable, onImageEdit }: any)
 };
 
 // ─── TIMELINE ──────────────────────────────────────────────────────────────
-const TimelineSection = ({ events, isEditable, onImageEdit }: { events: any[]; isEditable?: boolean; onImageEdit?: any }) => {
+const TimelineSection = ({ events, weddingDate, weddingTime, isEditable, onImageEdit }: { events: any[]; weddingDate: string; weddingTime?: string; isEditable?: boolean; onImageEdit?: any }) => {
   const defaultEvents: EventData[] = [
     { title: 'Mehendi', date: 'March 15, 2025', time: '2:00 PM Onwards', desc: 'A vibrant celebration of art, music, and togetherness as families come together for intricate henna designs.', img: 'https://pub-4955b83e8ada4ae98b612bd6113cdc4c.r2.dev/download%20(14).jpg' },
     { title: 'Sangeet', date: 'March 16, 2025', time: '7:00 PM Onwards', desc: 'An evening of music, dance, and unforgettable performances by family and friends.', img: 'https://pub-4955b83e8ada4ae98b612bd6113cdc4c.r2.dev/wedding%20invitation%20image.jpg' },
@@ -700,7 +708,7 @@ const TimelineSection = ({ events, isEditable, onImageEdit }: { events: any[]; i
                 <div className={`w-full lg:w-[45%] sr ${i % 2 === 0 ? 'fl pr-14 text-right' : 'fr pl-14 text-left'}`}>
                   <p className="font-inter uppercase tracking-[0.2em] text-[#E8D48B] mb-2 font-semibold"
                     style={{ fontSize: 'clamp(0.7rem, 1.4vw, 0.9rem)' }}>
-                    {ev.date} <span className="mx-2 opacity-30">·</span> {ev.time}
+                    {formatWeddingDate(ev.date || weddingDate)} <span className="mx-2 opacity-30">·</span> {formatWeddingTime(ev.time || weddingTime)}
                   </p>
                   <h3 className="font-playfair font-bold text-white mb-3 tracking-tight"
                     style={{ fontSize: 'clamp(1.4rem, 3vw, 2.5rem)' }}>{name}</h3>
@@ -738,7 +746,7 @@ const TimelineSection = ({ events, isEditable, onImageEdit }: { events: any[]; i
                 </div>
                 <div className="p-5 sm:p-8 flex flex-col flex-1">
                   <p className="font-inter uppercase tracking-[0.2em] text-[#E8D48B] font-bold mb-2.5"
-                    style={{ fontSize: 'clamp(0.65rem, 1.3vw, 0.72rem)' }}>{ev.date} · {ev.time}</p>
+                    style={{ fontSize: 'clamp(0.65rem, 1.3vw, 0.72rem)' }}>{formatWeddingDate(ev.date || weddingDate)} · {formatWeddingTime(ev.time || weddingTime)}</p>
                   <h3 className="font-playfair font-bold text-white mb-3 tracking-tight"
                     style={{ fontSize: 'clamp(1.2rem, 3vw, 1.75rem)' }}>{name}</h3>
                   <p className="font-inter text-white/50 leading-relaxed font-medium"
@@ -754,10 +762,10 @@ const TimelineSection = ({ events, isEditable, onImageEdit }: { events: any[]; i
 };
 
 // ─── DETAILS ───────────────────────────────────────────────────────────────
-const DetailsSection = ({ date, location }: any) => {
+const DetailsSection = ({ date, weddingTime, location }: any) => {
   const details = [
-    { icon: <svg viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>, label: 'The Date', value: date },
-    { icon: <svg viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" strokeWidth="1.2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>, label: 'The Time', value: '10:00 AM Onwards' },
+    { icon: <svg viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>, label: 'The Date', value: formatWeddingDate(date) },
+    { icon: <svg viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" strokeWidth="1.2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>, label: 'The Time', value: formatWeddingTime(weddingTime) },
     { icon: <svg viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>, label: 'The Venue', value: location },
     { icon: <svg viewBox="0 0 24 24" className="w-5 h-5 sm:w-6 sm:h-6" fill="none" stroke="currentColor" strokeWidth="1.2"><path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" /></svg>, label: 'The Style', value: 'Traditional Indian Attire' },
   ];
@@ -968,7 +976,7 @@ const RSVPSection = () => {
 
 // ─── FOOTER ────────────────────────────────────────────────────────────────
 // FIX: added safe-b class for home-indicator safe area on iOS
-const Footer = ({ brideName, groomName, date, location }: any) => (
+const Footer = ({ brideName, groomName, date, weddingTime, location }: any) => (
   <footer className="relative py-14 sm:py-24 md:py-32 px-4 sm:px-6 md:px-10 lg:px-16 bg-[#0D1321] overflow-hidden gpu safe-b">
     <div className="absolute inset-0 opacity-[0.05]" aria-hidden="true"
       style={{ backgroundImage: `radial-gradient(circle at 30% 50%,#D4AF37 0.5px,transparent 0.5px),radial-gradient(circle at 70% 50%,#D4AF37 0.5px,transparent 0.5px)`, backgroundSize: '40px 40px' }} />
@@ -987,7 +995,7 @@ const Footer = ({ brideName, groomName, date, location }: any) => (
       <motion.p initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ delay: 0.5, duration: 0.9 }}
         className="font-inter text-[#D4AF37] tracking-[0.3em] uppercase mb-6 sm:mb-8 font-bold"
         style={{ fontSize: 'clamp(0.6rem, 1.4vw, 0.88rem)' }}>
-        {date} <span className="mx-2 sm:mx-3 opacity-30">·</span> {location || 'Mumbai'}
+        {formatWeddingDate(date)} <span className="mx-2 sm:mx-3 opacity-30">·</span> {location || 'Mumbai'}
       </motion.p>
       <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ delay: 0.7, duration: 0.9 }}>
         <p className="font-cormorant italic text-white/40 leading-relaxed mb-6 sm:mb-8 max-w-md mx-auto px-4"
@@ -1015,7 +1023,7 @@ const WeddingSite = (props: any) => {
       <HeroSection {...props} />
       <InvitationMessage {...props} />
       <OurStory {...props} />
-      <TimelineSection events={props.events || []} isEditable={props.isEditable} onImageEdit={props.onImageEdit} />
+      <TimelineSection events={props.events || []} weddingDate={props.date} weddingTime={props.weddingTime} isEditable={props.isEditable} onImageEdit={props.onImageEdit} />
       <DetailsSection {...props} />
       <PhotoGallery galleryImages={props.galleryImages || []} isEditable={props.isEditable} onImageEdit={props.onImageEdit} />
       <StayTravelSection />
@@ -1093,13 +1101,15 @@ const App = (props: any) => {
 export default function IndianRoyalWeddingTemplate(props: any) {
   const brideName = props.brideName || 'Priya';
   const groomName = props.groomName || 'Arjun';
-  const weddingDate = props.weddingDate || 'March 17, 2025';
+  const weddingDate = props.weddingDate || props.date || '2025-03-17';
+  const weddingTime = props.weddingTime || '10:00';
   const locationStr = typeof props.location === 'string' ? props.location : props.venue || 'The Grand Palace, Mumbai';
 
   return (
     <App {...props}
       brideName={brideName} groomName={groomName}
       weddingDate={weddingDate} date={weddingDate}
+      weddingTime={weddingTime}
       location={locationStr} venue={locationStr}
     />
   );

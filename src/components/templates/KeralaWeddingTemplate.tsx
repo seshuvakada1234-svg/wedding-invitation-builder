@@ -6,6 +6,7 @@ import CountdownTimer from "../CountdownTimer";
 import MapPreview from "../MapPreview";
 import TemplateImage from "../TemplateImage";
 import { MapPin, Phone, MessageCircle, Calendar, Clock, Image as ImageIcon } from "lucide-react";
+import { formatWeddingDate, formatWeddingTime } from "../../lib/dateUtils";
 
 /* ─── DESIGN TOKENS (KERALA THEME) ─── */
 const C = {
@@ -87,7 +88,8 @@ function FloatingJasmine() {
 export default function KeralaWeddingTemplate({
   brideName = "Anjali",
   groomName = "Rahul",
-  date = "August 23, 2026",
+  date = "2026-08-23",
+  weddingTime = "10:45",
   venue = "St. Mary's Cathedral",
   venueAddress = "Marine Drive, Kochi",
   venueCity = "Kochi, Kerala",
@@ -170,7 +172,7 @@ export default function KeralaWeddingTemplate({
             className="inline-block border-y border-[#D4AF37]/50 py-3 px-8"
           >
             <p className="text-white/90 text-sm md:text-lg tracking-[0.2em] font-medium">
-              {date}
+              {formatWeddingDate(date)} | {formatWeddingTime(weddingTime)}
             </p>
           </motion.div>
         </div>
@@ -224,7 +226,7 @@ export default function KeralaWeddingTemplate({
                 <div className="space-y-2 mb-6 flex-grow">
                   <p className="flex items-center justify-center gap-2 text-sm font-semibold text-neutral-800">
                     <Clock size={14} className="text-[#D4AF37]" />
-                    {event.date} | {event.time}
+                    {formatWeddingDate(event.date || date)} | {formatWeddingTime(event.time || weddingTime)}
                   </p>
                   <p className="text-xs text-neutral-500 uppercase tracking-widest mt-4">
                     {event.location}
@@ -300,7 +302,7 @@ export default function KeralaWeddingTemplate({
           <KathakaliMotif size={60} className="mx-auto mb-10 text-[#D4AF37] opacity-40" />
           <h2 className="text-4xl md:text-6xl font-serif italic text-[#D4AF37] mb-8">Together Forever</h2>
           <p className="text-neutral-500 uppercase tracking-[0.5em] text-[10px] mb-12">
-            {brideName} & {groomName} — {date}
+            {brideName} & {groomName} — {formatWeddingDate(date)}
           </p>
           <div className="w-20 h-px bg-[#D4AF37]/30 mx-auto" />
         </SectionReveal>

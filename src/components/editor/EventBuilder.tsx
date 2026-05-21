@@ -65,22 +65,22 @@ export const EventBuilder = () => {
                       <EditorField label="Date">
                         <div className="relative">
                           <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
-                          <EditorInput
+                          <input
+                            type="date"
                             value={event.date}
                             onChange={(e) => updateEvent(idx, 'date', e.target.value)}
-                            className="pl-8 text-xs py-2"
-                            placeholder="Sep 24"
+                            className="w-full h-9 bg-white border border-gray-100 rounded-lg pl-8 text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-medium"
                           />
                         </div>
                       </EditorField>
                       <EditorField label="Time">
                         <div className="relative">
                           <Clock className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
-                          <EditorInput
+                          <input
+                            type="time"
                             value={event.time}
                             onChange={(e) => updateEvent(idx, 'time', e.target.value)}
-                            className="pl-8 text-xs py-2"
-                            placeholder="7:00 PM"
+                            className="w-full h-9 bg-white border border-gray-100 rounded-lg pl-8 text-[11px] focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all font-medium"
                           />
                         </div>
                       </EditorField>

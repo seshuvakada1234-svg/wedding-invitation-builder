@@ -33,6 +33,25 @@
         "updatedAt": { "type": "string" },
         "publishedAt": { "type": "string" }
       }
+    },
+    "adminImage": {
+      "title": "Admin Image Record",
+      "description": "User uploaded assets tracked for admin management",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "invitationId": { "type": "string" },
+        "templateId": { "type": "string" },
+        "templateName": { "type": "string" },
+        "brideName": { "type": "string" },
+        "groomName": { "type": "string" },
+        "imageType": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "fileName": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "source": { "type": "string", "enum": ["deploy", "redeploy"] }
+      }
     }
   },
   "firestore": {
@@ -43,6 +62,10 @@
     "/invites/{inviteId}": {
       "schema": "invite",
       "description": "Collection of wedding invitation sites"
+    },
+    "/adminImages/{imageId}": {
+      "schema": "adminImage",
+      "description": "Tracked user uploaded images and assets"
     }
   }
 }

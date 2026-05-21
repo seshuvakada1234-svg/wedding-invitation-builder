@@ -116,5 +116,10 @@ service cloud.firestore {
           "seshuvakada1234@gmail.com"
         ];
     }
+
+    // --- Collection: AdminImages ---
+    match /adminImages/{imageId} {
+      allow read, write: if isAdmin();
+    }
   }
 }

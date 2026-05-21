@@ -3,6 +3,7 @@ import { TraditionalDoor } from './DoorAnimation';
 import { GaneshSymbol, FloralArch } from './HousewarmingDecorations';
 import MapPreview from '../MapPreview';
 import TemplateImage from '../TemplateImage';
+import { formatWeddingDate, formatWeddingTime } from "../../lib/dateUtils";
 
 interface HousewarmingTemplateProps {
   title?: string;
@@ -39,8 +40,8 @@ export default function SouthIndianHousewarmingTemplate({
     primary: "Chodapaneedi Venkateswara Rao",
     secondary: "Anantha Satyavathi"
   },
-  date = "5th March 2026",
-  muhurtham = "2:43 AM",
+  date = "2026-03-05",
+  muhurtham = "02:43",
   additionalEvent,
   address = "Maruthi Center, Kothapeta, Konaseema District, AP",
   family = "Chodapaneedi Family",
@@ -62,7 +63,7 @@ export default function SouthIndianHousewarmingTemplate({
 
   const displayEvents = events.length > 0 ? events : [
     { name: eventName, date: date, time: muhurtham, location: address },
-    { name: "Satyanarayana Vratham", date: date, time: "12:00 PM", location: address }
+    { name: "Satyanarayana Vratham", date: date, time: "12:00", location: address }
   ];
 
   useEffect(() => {
@@ -161,10 +162,10 @@ export default function SouthIndianHousewarmingTemplate({
                   </div>
                   <div className="flex items-center justify-center gap-3 mb-2">
                      <span className="h-px w-8 bg-amber-400"></span>
-                     <h3 className="text-base sm:text-xl font-bold text-red-900">{event.name}: {event.date}</h3>
+                     <h3 className="text-base sm:text-xl font-bold text-red-900">{event.name}: {formatWeddingDate(event.date || date)}</h3>
                      <span className="h-px w-8 bg-amber-400"></span>
                   </div>
-                  <p className="text-amber-900 font-bold text-base sm:text-lg">{event.time}</p>
+                  <p className="text-amber-900 font-bold text-base sm:text-lg">{formatWeddingTime(event.time || muhurtham)}</p>
                   {event.location && event.location !== address && (
                     <p className="text-red-800 text-xs italic">Venue: {event.location}</p>
                   )}

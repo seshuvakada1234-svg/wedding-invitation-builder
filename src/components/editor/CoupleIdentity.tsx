@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEditorStore } from '../../store/useEditorStore';
 import { EditorSection, EditorField, EditorInput } from './EditorUI';
-import { User, Heart, Hash, Crown } from 'lucide-react';
+import { User, Heart, Hash, Crown, Calendar, Clock } from 'lucide-react';
 
 export const CoupleIdentity = () => {
   const { formData, updateField } = useEditorStore();
@@ -32,6 +32,31 @@ export const CoupleIdentity = () => {
             />
           </div>
         </EditorField>
+
+        <div className="grid grid-cols-2 gap-4">
+          <EditorField label="Wedding Date">
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="date"
+                value={formData.weddingDate || ''}
+                onChange={(e) => updateField('weddingDate', e.target.value)}
+                className="w-full h-11 bg-white border border-gray-200 rounded-xl px-10 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
+              />
+            </div>
+          </EditorField>
+          <EditorField label="Wedding Time">
+            <div className="relative">
+              <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="time"
+                value={formData.weddingTime || ''}
+                onChange={(e) => updateField('weddingTime', e.target.value)}
+                className="w-full h-11 bg-white border border-gray-200 rounded-xl px-10 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all"
+              />
+            </div>
+          </EditorField>
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <EditorField label="Couple Nickname">

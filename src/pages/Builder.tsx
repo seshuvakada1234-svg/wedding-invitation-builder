@@ -104,8 +104,8 @@ export default function Builder() {
   const { formData, setFormData } = useEditorStore();
 
   useEffect(() => {
-    // Set initial defaults if store is empty
-    if (!formData.brideName) {
+    // Set initial defaults if store is empty and we are NOT editing an existing invitation (no inviteId)
+    if (!inviteId && !formData.brideName) {
       setFormData({
         brideName: "Elena Sofia",
         groomName: "Marcus James",
@@ -153,7 +153,40 @@ export default function Builder() {
         modalButtonText: "Close with Love 💜",
       });
     }
-  }, [initialTemplate, setFormData]);
+  }, [inviteId, initialTemplate, setFormData]);
+
+  useEffect(() => {
+    // Reset editor state when opening an existing invite to prevent stale template/data leaks
+    if (inviteId) {
+      setFormData({
+        brideName: "",
+        groomName: "",
+        weddingDate: "",
+        location: "",
+        coverImage: null,
+        coverImageKey: null,
+        galleryImages: [],
+        galleryImageKeys: [],
+        events: [],
+        story: "",
+        muhurtham: "",
+        deity: "",
+        family: "",
+        eventName: "",
+        enable3D: true,
+        enableEnvelope: true,
+        googleMapsLink: "",
+        googleMapsEmbedUrl: "",
+        venueAddress: "",
+        venueCity: "",
+        coordinates: null,
+        template: undefined,
+        status: undefined,
+        publishedData: undefined,
+        draftData: undefined,
+      });
+    }
+  }, [inviteId, setFormData]);
 
   const currentTemplateId = (formData.template || initialTemplate) as TemplateType;
   const templateConfig = getTemplateById(currentTemplateId);
@@ -236,6 +269,7 @@ export default function Builder() {
       brideName: formData.brideName,
       groomName: formData.groomName,
       weddingDate: formData.weddingDate,
+      weddingTime: formData.weddingTime,
       location: formData.location,
       venueAddress: formData.venueAddress,
       venueCity: formData.venueCity,
@@ -251,6 +285,14 @@ export default function Builder() {
       eventName: formData.eventName,
       enable3D: formData.enable3D,
       enableEnvelope: formData.enableEnvelope,
+      coupleNickname: formData.coupleNickname,
+      weddingHashtag: formData.weddingHashtag,
+      familyNames: formData.familyNames,
+      heroTitle: formData.heroTitle,
+      heroSubtitle: formData.heroSubtitle,
+      musicUrl: formData.musicUrl,
+      rsvpDeadline: formData.rsvpDeadline,
+      whatsappNumber: formData.whatsappNumber,
     });
 
     if (!loadedDataRef.current && isEditMode) {
@@ -378,13 +420,32 @@ export default function Builder() {
           }
 
           // ── CORE HYDRATION ──
-          // Always load from draftData if available, otherwise fallback to root (for legacy)
-          const draft = data.draftData || data;
+          // On Builder load:
+          // if invitation.status == live:
+          // load publishedData first
+          // setEditorState(publishedData)
+          // isPublished = true
+          // hasChanges = false
+          // button = REDEPLOY
+          // Else:
+          // load draftData
+          // Else:
+          // load template defaults
+          // Priority: publishedData -> draftData -> template defaults
+          let draft = null;
+          if (data.status === "live" && data.publishedData) {
+            draft = data.publishedData;
+          } else if (data.draftData) {
+            draft = data.draftData;
+          } else {
+            draft = data; // legacy fallback
+          }
 
           setFormData({
             ...data, // Keep meta fields (views, status, etc.)
             ...draft, // Overlay actual design content
             templateId: data.templateId || draft.template || data.template || initialTemplate,
+            template: draft.template || data.template || data.templateId || initialTemplate,
           });
 
           // Memory for other templates
@@ -395,7 +456,11 @@ export default function Builder() {
           // Sync prevTemplateRef to avoid triggering the template switch effect on initial load
           prevTemplateRef.current = draft.template || data.template;
           setIsEditMode(true);
-          setHasUnpublishedChanges(data.hasUnpublishedChanges || false);
+          if (data.status === "live") {
+            setHasUnpublishedChanges(false);
+          } else {
+            setHasUnpublishedChanges(data.hasUnpublishedChanges || false);
+          }
 
           // Set initial reference data AFTER loading so change-detection
           // doesn't fire immediately on open
@@ -403,6 +468,7 @@ export default function Builder() {
             brideName: draft.brideName,
             groomName: draft.groomName,
             weddingDate: draft.weddingDate,
+            weddingTime: draft.weddingTime,
             location: draft.location,
             venueAddress: draft.venueAddress,
             venueCity: draft.venueCity,
@@ -418,6 +484,14 @@ export default function Builder() {
             eventName: draft.eventName,
             enable3D: draft.enable3D,
             enableEnvelope: draft.enableEnvelope,
+            coupleNickname: draft.coupleNickname,
+            weddingHashtag: draft.weddingHashtag,
+            familyNames: draft.familyNames,
+            heroTitle: draft.heroTitle,
+            heroSubtitle: draft.heroSubtitle,
+            musicUrl: draft.musicUrl,
+            rsvpDeadline: draft.rsvpDeadline,
+            whatsappNumber: draft.whatsappNumber,
           });
         } else {
           toast.error("Invitation not found.");

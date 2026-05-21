@@ -19,11 +19,13 @@ import {
 } from "lucide-react";
 import TemplateImage from "../TemplateImage";
 import { WeddingEvent, EditableImage } from "../../types";
+import { formatWeddingDate, formatWeddingTime, getDayOfWeek } from "../../lib/dateUtils";
 
 interface SouthIndiaTemplateProps {
   brideName: string;
   groomName: string;
   date: string;
+  weddingTime?: string;
   venue: string;
   venueAddress?: string;
   venueCity?: string;
@@ -97,7 +99,8 @@ const SHIMMER_TEXT_CLASS = "bg-linear-to-r from-[var(--secondary-color,#e9d5ff)]
 export default function SouthIndiaTemplate({
   brideName = "Sophia",
   groomName = "Alexander",
-  date = "September 24, 2026",
+  date = "",
+  weddingTime = "",
   venue = "Royal Wisteria Garden Estate",
   venueAddress = "123 Lavender Lane",
   venueCity = "Wisteria Valley",
@@ -180,6 +183,10 @@ export default function SouthIndiaTemplate({
     e.preventDefault();
     setIsRSVPSubmitted(true);
   };
+
+  const formattedDate = useMemo(() => formatWeddingDate(date), [date]);
+  const formattedTime = useMemo(() => formatWeddingTime(weddingTime), [weddingTime]);
+  const weddingDay = useMemo(() => getDayOfWeek(date), [date]);
 
   // Countdown State
   const [timeLeft, setTimeLeft] = useState({
@@ -375,7 +382,7 @@ export default function SouthIndiaTemplate({
                 <p className="font-['Great_Vibes'] text-5xl md:text-7xl text-purple-200/90 drop-shadow-[0_0_40px_rgba(168,85,247,0.4)]">
                   {brideName} & {groomName}
                 </p>
-                <p className="font-serif text-lg text-white/50 tracking-[0.2em]">{date}</p>
+                <p className="font-serif text-lg text-white/50 tracking-[0.2em]">{formattedDate}</p>
               </motion.div>
 
               <motion.div
@@ -413,28 +420,7 @@ export default function SouthIndiaTemplate({
           transition={{ duration: 2, delay: 0.5 }}
           className={`${hasEntered ? 'block' : 'hidden'} relative z-0`}
         >
-          {/* Locked Features Overlay for Non-Paid Drafts */}
-          {(!isPaid && isEditable) && (
-            <div className="fixed bottom-0 left-0 right-0 z-50 p-6 flex justify-center pointer-events-none">
-              <motion.div 
-                initial={{ y: 100 }}
-                animate={{ y: 0 }}
-                className="bg-white/80 backdrop-blur-xl border border-purple-200 px-8 py-4 rounded-3xl shadow-2xl flex items-center gap-6 pointer-events-auto"
-              >
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#d4af37]">Premium Temple Invitation</span>
-                  <span className="text-xs text-purple-900/60">Unlock all features to publish your invitation</span>
-                </div>
-                <button
-                  onClick={onUnlock}
-                  className="bg-[#d4af37] text-white px-6 py-3 rounded-full text-xs font-bold uppercase tracking-widest shadow-lg hover:scale-105 transition-transform flex items-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  Unlock Now
-                </button>
-              </motion.div>
-            </div>
-          )}
+
         <nav className="fixed top-0 left-0 right-0 z-50 h-16 flex items-center justify-between px-6 bg-[#fefcf7]/75 backdrop-blur-xl border-b border-purple-200/20">
           <a href="#" className="font-['Great_Vibes'] text-2xl text-purple-700 hover:text-purple-500 transition-colors">
             {brideName[0]} & {groomName[0]}
@@ -511,7 +497,7 @@ export default function SouthIndiaTemplate({
                 </div>
                 <div className="flex items-center justify-center lg:justify-start gap-4 mb-10">
                   <div className="w-16 h-px bg-gradient-to-r from-transparent to-purple-300" />
-                  <p className="font-serif text-xl text-purple-500/80 tracking-[0.15em]">{date}</p>
+                  <p className="font-serif text-xl text-purple-500/80 tracking-[0.15em]">{formattedDate} • {formattedTime}</p>
                   <div className="w-16 h-px bg-gradient-to-l from-transparent to-purple-300" />
                 </div>
                 <button
@@ -802,7 +788,7 @@ export default function SouthIndiaTemplate({
               <div className="text-center max-w-3xl mx-auto mb-20">
                 <SectionReveal>
                   <p className="font-serif text-yellow-300 text-sm tracking-[0.5em] uppercase mb-6">
-                    {events[0].time} • {events[0].date || date}
+                    {formatWeddingTime(events[0].time)} • {formatWeddingDate(events[0].date || date)}
                   </p>
 
                   <h2 className="font-['Playfair_Display'] text-5xl md:text-7xl text-yellow-50 font-semibold leading-tight">
@@ -953,7 +939,7 @@ export default function SouthIndiaTemplate({
               <div className="text-center max-w-4xl mx-auto mb-20 space-y-6">
                 <SectionReveal>
                   <p className="font-serif text-emerald-400 text-sm tracking-[0.4em] uppercase mb-4 font-medium">
-                     {events[1].time} • {events[1].date || date}
+                     {formatWeddingTime(events[1].time)} • {formatWeddingDate(events[1].date || date)}
                   </p>
                   <h2 className="font-['Playfair_Display'] text-5xl md:text-7xl lg:text-8xl font-semibold text-emerald-50 leading-[1.1] tracking-tight">
                     The Art of<br />
@@ -1085,7 +1071,7 @@ export default function SouthIndiaTemplate({
                   <div className="w-16 h-px bg-gradient-to-l from-transparent to-red-500" />
                 </div>
                 <h2 className="font-['Playfair_Display'] text-3xl md:text-4xl font-medium text-red-50 mb-2">{events[2].name}</h2>
-                <p className="font-serif text-lg text-red-200/60">{events[2].time} • {events[2].date || date}</p>
+                <p className="font-serif text-lg text-red-200/60">{formatWeddingTime(events[2].time)} • {formatWeddingDate(events[2].date || date)}</p>
               </SectionReveal>
   
               {/* Collage */}
@@ -1174,7 +1160,7 @@ export default function SouthIndiaTemplate({
                        />
                      </div>
                      <div className="p-8">
-                       <p className="text-red-400 font-serif tracking-widest text-xs uppercase mb-3">{event.time} • {event.date || date}</p>
+                       <p className="text-red-400 font-serif tracking-widest text-xs uppercase mb-3">{formatWeddingTime(event.time)} • {formatWeddingDate(event.date || date)}</p>
                        <h3 className="font-['Playfair_Display'] text-2xl text-white font-medium mb-3 italic">{event.name}</h3>
                        <p className="text-white/40 mb-6 flex items-start gap-2">
                           <Crown className="w-4 h-4 text-red-500 shrink-0" />
@@ -1237,7 +1223,7 @@ export default function SouthIndiaTemplate({
                   <h3 className="font-['Playfair_Display'] text-xl font-medium text-purple-800 mb-2">{item.title}</h3>
                   <p className="font-serif text-purple-600/70 mb-4">{item.desc}</p>
                   <div className="w-12 h-px bg-gradient-to-r from-purple-300 to-[#d4af37] mx-auto mb-4" />
-                  <p className="font-serif text-sm text-purple-500 tracking-wider font-semibold">{item.time}</p>
+                  <p className="font-serif text-sm text-purple-500 tracking-wider font-semibold">{idx === 0 ? formattedTime : item.time}</p>
                   <p className="font-['Great_Vibes'] text-xl text-purple-600 mt-1">{item.venue}</p>
                 </SectionReveal>
               ))}
@@ -1261,7 +1247,7 @@ export default function SouthIndiaTemplate({
                   </React.Fragment>
                 ))}
               </div>
-              <p className="font-['Great_Vibes'] text-2xl text-purple-500 mt-8">{date}</p>
+              <p className="font-['Great_Vibes'] text-2xl text-purple-500 mt-8">{formattedDate}</p>
             </SectionReveal>
           </div>
         </section>
@@ -1369,7 +1355,7 @@ export default function SouthIndiaTemplate({
               <div className="w-16 h-px bg-gradient-to-l from-transparent to-purple-300" />
             </div>
             <p className="font-['Great_Vibes'] text-4xl md:text-5xl text-purple-600 mb-3">{brideName} & {groomName}</p>
-            <p className="font-serif text-lg text-purple-400 mb-6">{date} • {venue}</p>
+            <p className="font-serif text-lg text-purple-400 mb-6">{formattedDate} • {venue}</p>
             <div className="flex justify-center gap-6 mt-8">
               {[Instagram, Mail, Heart].map((Icon, i) => (
                 <a key={i} href="#" className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-400 hover:bg-purple-500 hover:text-white transition-all duration-300 shadow-sm">
@@ -1409,8 +1395,8 @@ export default function SouthIndiaTemplate({
                   {modalTitle}
                 </p>
                 <div className="w-16 h-px bg-gradient-to-r from-purple-300 to-[#eddb9e] mx-auto mb-6" />
-                <p className="font-['Playfair_Display'] text-2xl text-purple-700 mb-1">{date}</p>
-                <p className="font-serif text-purple-500/70 mb-4">{modalSubtitle}</p>
+                <p className="font-['Playfair_Display'] text-2xl text-purple-700 mb-1">{formattedDate}</p>
+                <p className="font-serif text-purple-500/70 mb-4">{modalSubtitle || formattedTime}</p>
                 <p className="font-['Great_Vibes'] text-2xl text-purple-500 mb-8">{venue}</p>
                 <button
                    onClick={() => setIsInvitationOpen(false)}

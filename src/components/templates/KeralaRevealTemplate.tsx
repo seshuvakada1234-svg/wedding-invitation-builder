@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import MapPreview from "../MapPreview";
 import TemplateImage from "../TemplateImage";
+import { formatWeddingDate, formatWeddingTime } from "../../lib/dateUtils";
 import { 
   MapPin, 
   Calendar, 
@@ -28,6 +29,7 @@ interface KeralaRevealTemplateProps {
   brideName?: string;
   groomName?: string;
   date?: string;
+  weddingTime?: string;
   venue?: string;
   city?: string;
   venueAddress?: string;
@@ -84,7 +86,8 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
 export default function KeralaRevealTemplate({
   brideName = "Ravi",
   groomName = "Priya",
-  date = "14th February 2025",
+  date = "2025-02-14",
+  weddingTime = "09:30",
   venue = "Sri Lakshmi Kalyana Mandapam",
   city = "Konaseema",
   venueAddress = "Near Godavari Bridge Road, Amalapuram, Andhra Pradesh",
@@ -217,7 +220,8 @@ export default function KeralaRevealTemplate({
             </motion.h1>
             <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} transition={{ delay: 0.5 }}>
               <GoldDivider />
-              <p className="text-lg md:text-2xl font-serif italic mt-4">{date}</p>
+              <p className="text-lg md:text-2xl font-serif italic mt-4">{formatWeddingDate(date)}</p>
+              <p className="text-md md:text-xl font-serif italic mt-1 text-[#FBC02D]">{formatWeddingTime(weddingTime)}</p>
               <p className="text-[10px] md:text-xs uppercase tracking-[0.3em] mt-2 opacity-60">{city}, {venue}</p>
             </motion.div>
           </div>
@@ -245,7 +249,7 @@ export default function KeralaRevealTemplate({
                  {brideName} &amp; {groomName}
                </div>
                <div className="text-sm font-bold tracking-widest text-green-800 uppercase mb-2">
-                 {date}
+                 {formatWeddingDate(date)} | {formatWeddingTime(weddingTime)}
                </div>
                <div className="text-xs text-neutral-500 italic">
                  Venue: {venue}, {city}
@@ -316,8 +320,8 @@ export default function KeralaRevealTemplate({
                   />
                 </div>
                 <h3 className="text-lg font-serif italic text-green-900 mb-2">{event.name}</h3>
-                <div className="text-[11px] font-bold text-yellow-600 uppercase mb-1">{event.date}</div>
-                <div className="text-xs text-neutral-400 mb-4">{event.time}</div>
+                <div className="text-[11px] font-bold text-yellow-600 uppercase mb-1">{formatWeddingDate(event.date || date)}</div>
+                <div className="text-xs text-neutral-400 mb-4">{formatWeddingTime(event.time || weddingTime)}</div>
                 <p className="text-[11px] text-neutral-500 leading-relaxed uppercase tracking-tighter">{event.location}</p>
               </motion.div>
             ))}
