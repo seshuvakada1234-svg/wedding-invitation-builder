@@ -45,7 +45,7 @@ service cloud.firestore {
         && data.groomName is string && data.groomName.size() <= 100
         && data.weddingDate is string && data.weddingDate.size() <= 100
         && data.location is string && data.location.size() <= 200
-        && data.template in ['royal-wedding', 'konaseema', 'kerala-wedding', 'kerala-envelope-reveal', 'housewarming-south']
+        && data.template is string && data.template.size() <= 100
         && data.views is number && data.views >= 0
         && data.viewLimit is number && data.viewLimit >= 0
         && data.slug is string && data.slug.size() <= 128
@@ -54,7 +54,15 @@ service cloud.firestore {
         && (data.galleryImageKeys == null || data.galleryImageKeys is list)
         && (data.events == null || data.events is list)
         && (data.createdAt == null || data.createdAt is string || data.createdAt is timestamp)
-        && (data.updatedAt == null || data.updatedAt is string || data.updatedAt is timestamp);
+        && (data.updatedAt == null || data.updatedAt is string || data.updatedAt is timestamp)
+        && (data.status == null || data.status is string)
+        && (data.published == null || data.published is bool)
+        && (data.draftData == null || data.draftData is map || data.draftData == null)
+        && (data.publishedData == null || data.publishedData is map || data.publishedData == null)
+        && (data.templateDrafts == null || data.templateDrafts is map || data.templateDrafts == null)
+        && (data.deployCount == null || data.deployCount is number)
+        && (data.redeployCount == null || data.redeployCount is number)
+        && (data.imageCount == null || data.imageCount is number);
     }
 
     // --- Collection: Invites ---
@@ -120,6 +128,13 @@ service cloud.firestore {
     // --- Collection: AdminImages ---
     match /adminImages/{imageId} {
       allow read, write: if isAdmin();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+    }
+
+    // --- Collection: UploadedImages ---
+    match /uploadedImages/{imageId} {
+      allow read, write: if isAdmin();
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
     }
   }
 }

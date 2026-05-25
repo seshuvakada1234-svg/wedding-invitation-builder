@@ -48,7 +48,7 @@ import { WeddingInvite, TemplateType, WeddingEvent, EditableImage, TemplateDraft
 import { auth, authFetch, db, handleFirestoreError, loginAnonymously } from "../lib/firebase";
 import { getTemplateById } from "../templates";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, onSnapshot, collection } from "firebase/firestore";
+import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, increment, updateDoc } from "firebase/firestore";
 import toast from "react-hot-toast";
 import ImageEditorModal from "../components/ImageEditorModal";
 import ImageItem from "../components/ImageItem";
@@ -90,6 +90,87 @@ const GALLERY_DEFAULTS: Record<string, string[]> = {
     "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800",
   ],
 };
+
+function normalizeImages(source: any) {
+  const getUrl = (val: any): string => {
+    if (!val) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "object" && val.url) return val.url;
+    return "";
+  };
+
+  const heroImage = getUrl(source.heroImage);
+  const coverImage = getUrl(source.coverImage);
+  const backgroundImage = getUrl(source.backgroundImage);
+  const introImage = getUrl(source.introImage);
+  const coupleImage = getUrl(source.coupleImage);
+  const image = getUrl(source.image);
+
+  // Gallery images can be array of strings or objects
+  const galleryImages = (source.galleryImages || []).map((img: any) => getUrl(img)).filter(Boolean);
+
+  // Event images can be event.image or event.img
+  const eventImages: string[] = [];
+  if (source.events && Array.isArray(source.events)) {
+    source.events.forEach((ev: any) => {
+      const imgVal = ev.image || ev.img;
+      const url = getUrl(imgVal);
+      if (url) {
+        eventImages.push(url);
+      }
+    });
+  }
+  // Also support separate eventImages if provided
+  if (source.eventImages && Array.isArray(source.eventImages)) {
+    source.eventImages.forEach((img: any) => {
+      const url = getUrl(img);
+      if (url && !eventImages.includes(url)) {
+        eventImages.push(url);
+      }
+    });
+  }
+
+  // timelines or legacy fields
+  const timelineImages: string[] = [];
+  if (source.timeline && Array.isArray(source.timeline)) {
+    source.timeline.forEach((item: any) => {
+      const url = getUrl(item.image || item.img);
+      if (url) {
+        timelineImages.push(url);
+      }
+    });
+  }
+
+  const allUrls = [
+    heroImage,
+    coverImage,
+    backgroundImage,
+    introImage,
+    coupleImage,
+    image,
+    ...galleryImages,
+    ...eventImages,
+    ...timelineImages,
+  ].filter(Boolean);
+
+  const imageUrls = Array.from(new Set(allUrls));
+
+  const uploadedAssets = imageUrls.filter(url => 
+    !url.includes("images.unsplash.com") && 
+    url.startsWith("http")
+  );
+
+  return {
+    heroImage: heroImage || coverImage || image || "",
+    coverImage: coverImage || heroImage || image || "",
+    backgroundImage: backgroundImage || "",
+    introImage: introImage || "",
+    galleryImages,
+    eventImages,
+    imageUrls,
+    uploadedAssets,
+  };
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -427,29 +508,63 @@ export default function Builder() {
           // On Builder load:
           // if invitation.status == live:
           // load publishedData first
-          // setEditorState(publishedData)
-          // isPublished = true
-          // hasChanges = false
-          // button = REDEPLOY
           // Else:
           // load draftData
           // Else:
           // load template defaults
           // Priority: publishedData -> draftData -> template defaults
-          let draft = null;
-          if (data.status === "live" && data.publishedData) {
-            draft = data.publishedData;
-          } else if (data.draftData) {
-            draft = data.draftData;
-          } else {
-            draft = data; // legacy fallback
-          }
+          const tempId = data.template || data.templateId || initialTemplate;
+          const templateConf = getTemplateById(tempId);
+          const templateDefaultCover = templateConf?.previewImage || "https://images.unsplash.com/photo-1583939003579-730e3918a45a?w=800&h=600&fit=crop&auto=format";
+
+          const templateDefaults = {
+            coverImage: templateDefaultCover,
+            heroImage: templateDefaultCover,
+            backgroundImage: "",
+            introImage: "",
+            galleryImages: GALLERY_DEFAULTS[tempId] || GALLERY_DEFAULTS["default"] || [],
+            events: (TEMPLATE_DEFAULTS[tempId] || ["Wedding"]).map((name) => ({
+              name,
+              date: "TBD",
+              time: "TBD",
+              location: "TBD",
+              image: "",
+            })),
+          };
+
+          const draft = data.publishedData || data.draftData || templateDefaults;
+
+          const getImgUrl = (val: any): string => {
+            if (!val) return "";
+            if (typeof val === "string") return val;
+            if (typeof val === "object" && val.url) return val.url;
+            return "";
+          };
+
+          const hydrHero = getImgUrl(draft.heroImage) || templateDefaultCover;
+          const hydrCover = getImgUrl(draft.coverImage) || templateDefaultCover;
+          const hydrBackground = getImgUrl(draft.backgroundImage) || "";
+          const hydrIntro = getImgUrl(draft.introImage) || "";
+
+          const hydrGallery = (draft.galleryImages && draft.galleryImages.length > 0)
+            ? draft.galleryImages
+            : templateDefaults.galleryImages;
+
+          const hydrEvents = (draft.events && draft.events.length > 0)
+            ? draft.events
+            : templateDefaults.events;
 
           setFormData({
             ...data, // Keep meta fields (views, status, etc.)
             ...draft, // Overlay actual design content
-            templateId: data.templateId || draft.template || data.template || initialTemplate,
-            template: draft.template || data.template || data.templateId || initialTemplate,
+            heroImage: hydrHero,
+            coverImage: hydrCover,
+            backgroundImage: hydrBackground,
+            introImage: hydrIntro,
+            galleryImages: hydrGallery,
+            events: hydrEvents,
+            templateId: tempId,
+            template: tempId,
           });
 
           // Memory for other templates
@@ -458,7 +573,7 @@ export default function Builder() {
           }
 
           // Sync prevTemplateRef to avoid triggering the template switch effect on initial load
-          prevTemplateRef.current = draft.template || data.template;
+          prevTemplateRef.current = draft.template || data.template || tempId;
           setIsEditMode(true);
           if (data.status === "live") {
             setHasUnpublishedChanges(false);
@@ -479,9 +594,9 @@ export default function Builder() {
             googleMapsLink: draft.googleMapsLink,
             coordinates: draft.coordinates,
             story: draft.story,
-            events: draft.events,
-            galleryImages: draft.galleryImages,
-            template: draft.template,
+            events: hydrEvents,
+            galleryImages: hydrGallery,
+            template: tempId,
             muhurtham: draft.muhurtham,
             deity: draft.deity,
             family: draft.family,
@@ -792,7 +907,7 @@ export default function Builder() {
     });
   };
 
-  const uploadImage = async (file: File) => {
+  const uploadImage = async (file: File, type: string = "General") => {
     if (!currentUser) throw new Error("Must be logged in to upload.");
 
     const formDataBody = new FormData();
@@ -836,6 +951,67 @@ export default function Builder() {
 
     try {
       const data = await res.json();
+
+      const invId = inviteId || formData.slug || siteSlug;
+      const isLive = formData.status === "live" || formData.published;
+
+      const imgDoc = {
+        userId: currentUser.uid,
+        email: currentUser.email || "",
+        invitationId: invId || "anonymous",
+        template: formData.template || "royal-wedding",
+        templateName: formData.template || "royal-wedding",
+        brideName: formData.brideName || "",
+        groomName: formData.groomName || "",
+        imageUrl: data.url,
+        imageKey: data.key,
+        previewUrl: data.url,
+        fileName: file.name,
+        imageType: type,
+        type: type,
+        deployType: isLive ? "REDEPLOY" : "DEPLOY",
+        source: isLive ? "redeploy" : "deploy",
+        uploadedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+
+      try {
+        await addDoc(collection(db, "uploadedImages"), {
+          invitationId: invId || siteSlug || "anonymous",
+          userId: currentUser.uid,
+          email: currentUser.email || "",
+          brideName: formData.brideName || "",
+          groomName: formData.groomName || "",
+          templateId: formData.templateId || formData.template || "royal-wedding",
+          templateName: formData.template || "royal-wedding",
+          imageUrl: data.url,
+          imageKey: data.key,
+          previewUrl: data.url,
+          fileName: file.name,
+          imageType: type,
+          type: type,
+          deployType: isLive ? "REDEPLOY" : "DEPLOY",
+          source: isLive ? "redeploy" : "deploy",
+          createdAt: serverTimestamp(),
+          uploadedAt: new Date().toISOString()
+        });
+
+        // Also save to adminImages for backward compatibility
+        await addDoc(collection(db, "adminImages"), imgDoc);
+      } catch (dbErr) {
+        console.error("Firestore image metadata save failed", dbErr);
+      }
+
+      if (invId) {
+        try {
+          await updateDoc(doc(db, "invites", invId), {
+            imageCount: increment(1)
+          });
+        } catch (dbErr2) {
+          console.error("Firestore increment imageCount failed", dbErr2);
+        }
+      }
+
       return { url: data.url, key: data.key };
     } catch (e) {
       console.error("JSON parse error on upload:", e);
@@ -960,14 +1136,14 @@ export default function Builder() {
     }
   };
 
-  const uploadToR2 = async (imgUrl: string): Promise<string> => {
+  const uploadToR2 = async (imgUrl: string, type: string = "General"): Promise<string> => {
     try {
       const res = await fetch(imgUrl);
       const blob = await res.blob();
       const extension = blob.type.split("/")[1] || "jpg";
       const filename = `uploaded_image_${Date.now()}.${extension}`;
       const file = new File([blob], filename, { type: blob.type });
-      const uploaded = await uploadImage(file);
+      const uploaded = await uploadImage(file, type);
       return uploaded.url;
     } catch (e) {
       console.error("uploadToR2 failed for", imgUrl, e);
@@ -975,7 +1151,7 @@ export default function Builder() {
     }
   };
 
-  const resolveImage = async (image: any): Promise<any> => {
+  const resolveImage = async (image: any, type: string = "General"): Promise<any> => {
     if (!image) return null;
 
     let imgUrl = typeof image === "string" ? image : image.url;
@@ -987,7 +1163,7 @@ export default function Builder() {
 
     if (imgUrl.startsWith("blob:") || imgUrl.startsWith("data:")) {
       try {
-        const r2Url = await uploadToR2(imgUrl);
+        const r2Url = await uploadToR2(imgUrl, type);
         if (typeof image === "string") {
           return r2Url;
         } else {
@@ -1083,31 +1259,31 @@ export default function Builder() {
       const existingPublished: Partial<TemplateDraft> = formData.publishedData || {};
 
       // REDEPLOY FIX logic using resolveImage helper
-      const newHero = await resolveImage(rawDraft.heroImage);
-      const heroImage = newHero ?? existingPublished.heroImage;
+      const newHero = await resolveImage(rawDraft.heroImage, "HERO");
+      const heroImageObj = newHero ?? existingPublished.heroImage;
 
-      const newCover = await resolveImage(rawDraft.coverImage);
-      const coverImage = newCover ?? existingPublished.coverImage;
+      const newCover = await resolveImage(rawDraft.coverImage, "HERO");
+      const coverImageObj = newCover ?? existingPublished.coverImage;
 
-      const newBackground = await resolveImage(rawDraft.backgroundImage);
-      const backgroundImage = newBackground ?? existingPublished.backgroundImage;
+      const newBackground = await resolveImage(rawDraft.backgroundImage, "BACKGROUND");
+      const backgroundImageObj = newBackground ?? existingPublished.backgroundImage;
 
-      const newIntro = await resolveImage(rawDraft.introImage);
-      const introImage = newIntro ?? existingPublished.introImage;
+      const newIntro = await resolveImage(rawDraft.introImage, "HERO");
+      const introImageObj = newIntro ?? existingPublished.introImage;
 
       const rawGallery = rawDraft.galleryImages || [];
       const resolvedGallery = await Promise.all(
-        rawGallery.map((img) => resolveImage(img))
+        rawGallery.map((img) => resolveImage(img, "GALLERY"))
       );
-      const galleryImages = resolvedGallery.length > 0 
+      const galleryImagesObj = resolvedGallery.length > 0 
         ? resolvedGallery 
         : (existingPublished.galleryImages || []);
 
       const rawEventImages = rawDraft.eventImages || [];
       const resolvedEventImages = await Promise.all(
-        rawEventImages.map((img) => resolveImage(img))
+        rawEventImages.map((img) => resolveImage(img, "GALLERY"))
       );
-      const eventImages = resolvedEventImages.length > 0
+      const eventImagesObj = resolvedEventImages.length > 0
         ? resolvedEventImages
         : ((existingPublished as any)?.eventImages || []);
 
@@ -1116,7 +1292,7 @@ export default function Builder() {
         rawEvents.map(async (ev) => {
           const imgVal = ev.image || (ev as any).img;
           if (imgVal) {
-            const resolvedImg = await resolveImage(imgVal);
+            const resolvedImg = await resolveImage(imgVal, "GALLERY");
             return {
               ...ev,
               image: resolvedImg
@@ -1126,16 +1302,45 @@ export default function Builder() {
         })
       );
 
+      // Now normalize all constructed assets to plain URLs
+      const norm = normalizeImages({
+        ...rawDraft,
+        heroImage: heroImageObj,
+        coverImage: coverImageObj,
+        backgroundImage: backgroundImageObj,
+        introImage: introImageObj,
+        galleryImages: galleryImagesObj,
+        eventImages: eventImagesObj,
+        events: resolvedEvents,
+      });
+
+      const finalizedEvents = resolvedEvents.map((ev: any) => {
+        const imgVal = ev.image || ev.img;
+        let urlStr = "";
+        if (imgVal) {
+          urlStr = typeof imgVal === "string" ? imgVal : (imgVal.url || "");
+        }
+        const copy = { ...ev };
+        if (copy.image !== undefined) copy.image = urlStr;
+        if (copy.img !== undefined) copy.img = urlStr;
+        if (!copy.image && urlStr) {
+          copy.image = urlStr;
+        }
+        return copy;
+      });
+
       // Construct publishedData ONLY AFTER R2 UPLOADS COMPLETE
       const publishedData = {
         ...rawDraft,
-        heroImage,
-        coverImage,
-        backgroundImage,
-        introImage,
-        galleryImages,
-        eventImages,
-        events: resolvedEvents,
+        heroImage: norm.heroImage,
+        coverImage: norm.coverImage,
+        backgroundImage: norm.backgroundImage,
+        introImage: norm.introImage,
+        galleryImages: norm.galleryImages,
+        eventImages: norm.eventImages,
+        events: finalizedEvents,
+        imageUrls: norm.imageUrls,
+        uploadedAssets: norm.uploadedAssets,
         updatedAt: new Date().toISOString(),
         deployedAt: new Date().toISOString(),
       };
@@ -1159,6 +1364,7 @@ export default function Builder() {
         weddingDate: rawDraft.weddingDate,
         location: rawDraft.location,
         status: 'live',
+        published: true,
         isPaid: true,
         hasUnpublishedChanges: false,
         publishedAt: formData.publishedAt || new Date().toISOString(),
@@ -1175,6 +1381,31 @@ export default function Builder() {
       });
 
       if (!saveRes.ok) throw new Error("Failed to publish");
+
+      // Update deploy / redeploy counts in Firestore
+      try {
+        const isRedeploy = formData.status === "live" || formData.published === true;
+        const invitationRef = doc(db, "invites", id);
+        if (isRedeploy) {
+          await updateDoc(invitationRef, {
+            published: true,
+            publishedData,
+            status: "live",
+            redeployCount: increment(1),
+            imageCount: increment(norm.uploadedAssets.length)
+          });
+        } else {
+          await updateDoc(invitationRef, {
+            published: true,
+            publishedData,
+            status: "live",
+            deployCount: increment(1),
+            imageCount: increment(norm.uploadedAssets.length)
+          });
+        }
+      } catch (dbErr) {
+        console.error("Failed to update deploy/redeploy counters in Firestore", dbErr);
+      }
 
       setPublishedInviteId(id);
       setSaveSuccess(true);

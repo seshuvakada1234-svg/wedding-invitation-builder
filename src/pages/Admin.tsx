@@ -91,6 +91,7 @@ export default function Admin() {
       groomName?: string;
       imageCount: number;
       deployCount: number;
+      redeployCount: number;
       templates: Set<string>;
     }> = {};
 
@@ -104,12 +105,14 @@ export default function Admin() {
           groomName: img.groomName || "",
           imageCount: 0,
           deployCount: 0,
+          redeployCount: 0,
           templates: new Set<string>(),
         };
       }
       usersMap[uid].imageCount++;
-      if (img.templateName) {
-        usersMap[uid].templates.add(img.templateName);
+      const currentTemplate = img.templateId || img.template || img.templateName || "";
+      if (currentTemplate) {
+        usersMap[uid].templates.add(getTemplateName(currentTemplate));
       }
       if (img.email && (!usersMap[uid].email || usersMap[uid].email === "Unknown user")) {
         usersMap[uid].email = img.email;
@@ -128,13 +131,16 @@ export default function Admin() {
           groomName: invite.groomName || invite.draftData?.groomName || "",
           imageCount: 0,
           deployCount: 0,
+          redeployCount: 0,
           templates: new Set<string>(),
         };
       }
-      usersMap[uid].deployCount++;
-      const currentTemplate = invite.templateName || (invite.template ? getTemplateName(invite.template) : "");
+      usersMap[uid].deployCount += (invite.deployCount || 0);
+      usersMap[uid].redeployCount += (invite.redeployCount || 0);
+
+      const currentTemplate = invite.templateId || invite.template || invite.templateName || "";
       if (currentTemplate) {
-        usersMap[uid].templates.add(currentTemplate);
+        usersMap[uid].templates.add(getTemplateName(currentTemplate));
       }
       if (invite.email && (!usersMap[uid].email || usersMap[uid].email === "Unknown user")) {
         usersMap[uid].email = invite.email;
@@ -156,17 +162,29 @@ export default function Admin() {
     let items = adminImages.filter((img) => (img.userId || "anonymous") === selectedUserId);
 
     if (imageSubFilter === "DEPLOY") {
-      items = items.filter((img) => img.source === "deploy");
+      items = items.filter((img) => 
+        (img.deployType || "").toUpperCase() === "DEPLOY" || 
+        (img.source || "").toLowerCase() === "deploy"
+      );
     } else if (imageSubFilter === "REDEPLOY") {
-      items = items.filter((img) => img.source === "redeploy");
+      items = items.filter((img) => 
+        (img.deployType || "").toUpperCase() === "REDEPLOY" || 
+        (img.source || "").toLowerCase() === "redeploy"
+      );
     } else if (imageSubFilter === "HERO") {
-      items = items.filter((img) => (img.imageType || "").toUpperCase() === "HERO");
+      items = items.filter((img) => {
+        const type = (img.imageType || img.type || "").toUpperCase();
+        return type === "HERO" || type === "COVER" || img.fieldName === "heroImage" || img.fieldName === "coverImage";
+      });
     } else if (imageSubFilter === "GALLERY") {
-      items = items.filter((img) => (img.imageType || "").toUpperCase() === "GALLERY");
+      items = items.filter((img) => {
+        const type = (img.imageType || img.type || "").toUpperCase();
+        return type === "GALLERY" || type === "EVENT" || img.fieldName === "galleryImages" || img.fieldName === "eventImages";
+      });
     } else if (imageSubFilter === "BACKGROUND") {
       items = items.filter((img) => {
-        const type = (img.imageType || "").toUpperCase();
-        return type === "BACKGROUND" || type === "BG";
+        const type = (img.imageType || img.type || "").toUpperCase();
+        return type === "BACKGROUND" || type === "BG" || img.fieldName === "backgroundImage";
       });
     }
 
@@ -366,8 +384,8 @@ export default function Admin() {
         }, (err) => console.error("Templates listener error:", err));
         unsubs.current.push(ut);
 
-        // 5. Admin Images Listener
-        const uImg = onSnapshot(collection(db, "adminImages"), (snap) => {
+        // 5. Uploaded Images Listener
+        const uImg = onSnapshot(collection(db, "uploadedImages"), (snap) => {
           const imgList = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
           setAdminImages(imgList.sort((a, b) => {
             const getTs = (val: any) => {
@@ -376,7 +394,7 @@ export default function Admin() {
               const d = new Date(val);
               return isNaN(d.getTime()) ? 0 : d.getTime();
             };
-            return getTs(b.uploadedAt) - getTs(a.uploadedAt);
+            return getTs(b.uploadedAt || b.createdAt) - getTs(a.uploadedAt || a.createdAt);
           }));
         }, (err) => console.error("Admin images listener error:", err));
         unsubs.current.push(uImg);
