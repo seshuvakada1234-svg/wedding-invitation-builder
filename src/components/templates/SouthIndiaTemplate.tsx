@@ -337,17 +337,19 @@ export default function SouthIndiaTemplate({
             transition={{ duration: 1.8, ease: "easeInOut" }}
             className="fixed inset-0 z-[9999] bg-[#0a0014] overflow-hidden"
           >
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              onCanPlay={() => setIsVideoLoaded(true)}
-              onEnded={enterInvitation}
-              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-2000 ${isVideoLoaded ? 'opacity-100' : 'opacity-0'}`}
-            >
-              <source src={introVideoUrl} type="video/mp4" />
-            </video>
+            {introVideoUrl && introVideoUrl.trim() !== "" ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                onCanPlay={() => setIsVideoLoaded(true)}
+                onEnded={enterInvitation}
+                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-2000 ${isVideoLoaded ? 'opacity-100' : 'opacity-0'}`}
+              >
+                <source src={introVideoUrl} type="video/mp4" />
+              </video>
+            ) : null}
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(10,0,20,0.5)_80%,rgba(10,0,20,0.85)_100%)] z-2" />
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_30%,rgba(168,85,247,0.12)_0%,transparent_60%),radial-gradient(ellipse_at_30%_70%,rgba(147,51,234,0.08)_0%,transparent_50%)] z-3" />
             

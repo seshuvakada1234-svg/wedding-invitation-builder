@@ -100,8 +100,12 @@ export default function Layout() {
                       >
                         <div className="p-4 bg-editorial-bg/30 border-b border-editorial-border">
                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm">
-                                <img src={user.photoURL || ''} alt="" className="w-full h-full object-cover" />
+                              <div className="w-10 h-10 rounded-full overflow-hidden border border-white shadow-sm flex items-center justify-center bg-editorial-bg">
+                                {user.photoURL ? (
+                                  <img src={user.photoURL} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                  <User className="w-5 h-5 text-editorial-secondary" />
+                                )}
                               </div>
                               <div>
                                 <div className="text-xs font-bold text-editorial-ink">{user.displayName}</div>

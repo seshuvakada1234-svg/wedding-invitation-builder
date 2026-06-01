@@ -44,6 +44,48 @@ export default function TemplatesPage() {
     return () => unsub();
   }, []);
 
+  // ── Auto-sync any code-defined templates missing from Firestore ────────────────────────
+  useEffect(() => {
+    if (dbTemplates.length === 0) return;
+    
+    const syncMissing = async () => {
+      try {
+        const { doc, setDoc } = await import("firebase/firestore");
+        for (const t of staticTemplates) {
+          const exists = dbTemplates.some(dt => dt.id === t.id);
+          if (!exists) {
+            const tRef = doc(db, "templates", t.id);
+            await setDoc(tRef, {
+              id: t.id,
+              name: t.name,
+              publishPrice: t.publishPrice || 999,
+              category: t.category || 'classic',
+              enabled: true,
+              activeUses: 0,
+              thumbnail: t.thumbnail,
+              createdAt: new Date()
+            });
+            console.log(`Synced missing template: ${t.id} to Firestore.`);
+          }
+        }
+      } catch (e) {
+        console.error("Auto-sync templates error:", e);
+      }
+    };
+    
+    syncMissing();
+  }, [dbTemplates]);
+
+  // Combine static code-defined template layout data with Firestore dynamic controls
+  const mergedTemplates = staticTemplates.map(tplCode => {
+    const tplDb = dbTemplates.find(t => t.id === tplCode.id);
+    return {
+      ...tplCode,
+      ...tplDb,
+      enabled: tplDb ? tplDb.enabled : true,
+    };
+  }).filter(t => t.enabled !== false);
+
   // ── Core fix: look up existing invite before navigating ───────────────────
   //
   // Priority order:
@@ -147,20 +189,14 @@ export default function TemplatesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-12 text-center md:text-left">
-        {dbTemplates.length === 0 && !loadingTemplateId && (
+        {mergedTemplates.length === 0 && !loadingTemplateId && (
           <div className="col-span-full py-32 editorial-card bg-white border-dashed border-2 flex flex-col items-center justify-center">
             <Sparkles className="w-12 h-12 text-editorial-accent mb-4 opacity-20" />
             <p className="text-editorial-muted font-serif italic text-2xl">No templates available yet.</p>
             <p className="text-xs uppercase tracking-widest text-editorial-muted mt-2">Check back soon for new cinematic stories</p>
           </div>
         )}
-        {dbTemplates
-          .filter(t => t.enabled !== false)
-          .map((tplDb, i) => {
-            const tplCode = staticTemplates.find(st => st.id === tplDb.id);
-            if (!tplCode) return null;
-            
-            const tpl = { ...tplCode, ...tplDb };
+        {mergedTemplates.map((tpl, i) => {
             const isLoading = loadingTemplateId === tpl.id;
 
             return (
@@ -175,7 +211,7 @@ export default function TemplatesPage() {
                 <div className="relative aspect-[3/4] overflow-hidden bg-editorial-bg">
                   {/* Fallback & Background Image while iframe loads */}
                   <img
-                    src={tpl.thumbnail || tpl.previewImage}
+                    src={tpl.thumbnail || tpl.previewImage || "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=800"}
                     alt={tpl.name}
                     className="w-full h-full object-cover transition-opacity duration-1000 opacity-20 group-hover:opacity-40"
                     loading="lazy"

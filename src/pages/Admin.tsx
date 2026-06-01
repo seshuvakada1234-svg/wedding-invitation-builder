@@ -220,7 +220,7 @@ export default function Admin() {
           await setDoc(tRef, {
             id: t.id,
             name: t.name,
-            publishPrice: 999, // Standard default price if not already in DB
+            publishPrice: t.publishPrice || 999, // Standard default price if not already in DB
             category: t.category || 'classic',
             enabled: true,
             activeUses: 0,
@@ -1067,7 +1067,7 @@ export default function Admin() {
                             {/* Image Preview Container */}
                             <div className="aspect-square bg-editorial-bg overflow-hidden relative border-b border-editorial-border/30">
                               <img
-                                src={img.previewUrl || img.imageUrl}
+                                src={img.previewUrl || img.imageUrl || "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800"}
                                 alt={img.fileName || "uploaded user asset"}
                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                 loading="lazy"
@@ -1313,7 +1313,7 @@ function TemplatesManager({
                 </div>
               </div>
 
-              {tmpl.thumbnail && (
+              {tmpl.thumbnail && tmpl.thumbnail.trim() !== "" && (
                 <div className="mb-6 h-32 rounded-xl overflow-hidden bg-editorial-bg border border-editorial-border/30">
                   <img src={tmpl.thumbnail} alt={tmpl.name} className="w-full h-full object-cover" />
                 </div>

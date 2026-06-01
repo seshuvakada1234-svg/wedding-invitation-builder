@@ -52,6 +52,7 @@ import { doc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, increment
 import toast from "react-hot-toast";
 import ImageEditorModal from "../components/ImageEditorModal";
 import ImageItem from "../components/ImageItem";
+import { safeJsonStringify } from "../lib/stringUtils";
 
 import { useEditorStore } from "../store/useEditorStore";
 import * as Accordion from "@radix-ui/react-accordion";
@@ -76,13 +77,15 @@ const TEMPLATE_DEFAULTS: Record<string, string[]> = {
   "kerala-wedding": ["Madhuramveypu", "Nischaayam", "Wedding", "Reception"],
   "kerala-envelope-reveal": ["Pellikuthuru", "Haldi", "Mehendi", "Wedding"],
   "housewarming-south": ["Gruha Pravesh", "Satyanarayana Vratham"],
+  "royal-emerald": ["Haldi", "Mehendi", "Sangeet", "Wedding"],
+  "royal-heritage": ["Haldi", "Mehendi", "Sangeet", "Wedding"],
 };
 
 const GALLERY_DEFAULTS: Record<string, string[]> = {
   "housewarming-south": [
     "https://images.unsplash.com/photo-1582560475093-ba66accbc424?auto=format&fit=crop&q=80&w=800",
-    "https://images.unsplash.com/photo-1603228254119-e6a4d0adad35?auto=format&fit=crop&q=80&w=800",
-    "https://images.unsplash.com/photo-1623053531393-e4d0937a0980?auto=format&fit=crop&q=80&w=800",
+    "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800",
+    "https://images.unsplash.com/photo-1585338107529-13afc5f02586?auto=format&fit=crop&q=80&w=800",
   ],
   default: [
     "https://images.unsplash.com/photo-1510076857177-7470076d4098?auto=format&fit=crop&q=80&w=800",
@@ -346,7 +349,7 @@ export default function Builder() {
   useEffect(() => {
     if (!formData.published) return;
 
-    const currentDataStr = JSON.stringify({
+    const currentDataStr = safeJsonStringify({
       brideName: formData.brideName,
       groomName: formData.groomName,
       weddingDate: formData.weddingDate,
@@ -468,7 +471,7 @@ export default function Builder() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ id, ...inviteData }),
+          body: safeJsonStringify({ id, ...inviteData }),
         });
 
         console.log("Auto-save successful");
@@ -583,7 +586,7 @@ export default function Builder() {
 
           // Set initial reference data AFTER loading so change-detection
           // doesn't fire immediately on open
-          loadedDataRef.current = JSON.stringify({
+          loadedDataRef.current = safeJsonStringify({
             brideName: draft.brideName,
             groomName: draft.groomName,
             weddingDate: draft.weddingDate,
@@ -690,8 +693,8 @@ export default function Builder() {
     const published = formData.publishedData;
 
     // Simple JSON comparison for change detection
-    const draftStr = JSON.stringify(currentDraft);
-    const publishedStr = JSON.stringify(published);
+    const draftStr = safeJsonStringify(currentDraft);
+    const publishedStr = safeJsonStringify(published);
 
     setHasUnpublishedChanges(draftStr !== publishedStr);
   }, [formData]);
@@ -1116,7 +1119,7 @@ export default function Builder() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id, ...inviteData }),
+        body: safeJsonStringify({ id, ...inviteData }),
       });
 
       if (!saveRes.ok) {
@@ -1377,7 +1380,7 @@ export default function Builder() {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id, ...inviteData }),
+        body: safeJsonStringify({ id, ...inviteData }),
       });
 
       if (!saveRes.ok) throw new Error("Failed to publish");
@@ -1441,7 +1444,7 @@ export default function Builder() {
     setIsProcessingPayment(true);
 
     const currentTemplate = formData.template || "royal-wedding";
-    const templatePrice = templatePrices[currentTemplate] || 999;
+    const templatePrice = templatePrices[currentTemplate] || getTemplateById(currentTemplate)?.publishPrice || 999;
     const templatePricePaise = templatePrice * 100;
 
     try {
@@ -2112,7 +2115,7 @@ export default function Builder() {
                   <span className={`text-4xl font-serif font-bold ${
                     formData.template === 'south-india' ? 'text-[#d4af37]' : 'text-editorial-ink'
                   }`}>
-                    ₹{templatePrices[formData.template || "royal-wedding"] || "..."}
+                    ₹{templatePrices[formData.template || "royal-wedding"] || getTemplateById(formData.template || "royal-wedding")?.publishPrice || 999}
                   </span>
                   <span className="text-xs uppercase tracking-widest font-bold text-editorial-muted">One-time</span>
                 </div>
@@ -2130,7 +2133,7 @@ export default function Builder() {
                       "Pay once, valid forever"
                     ]
                   : [
-                    `Up to ${calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 0)} views included`,
+                    `Up to ${calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || getTemplateById(formData.template || "royal-wedding")?.publishPrice || 0)} views included`,
                     "Beautiful live website",
                     "Shareable link",
                     "WhatsApp sharing",
@@ -2158,10 +2161,10 @@ export default function Builder() {
                   {isProcessingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   {isProcessingPayment
                     ? "Processing..."
-                    : `Pay ₹${templatePrices[formData.template || "royal-wedding"] || "..."} & Publish`}
+                    : `Pay ₹${templatePrices[formData.template || "royal-wedding"] || getTemplateById(formData.template || "royal-wedding")?.publishPrice || 999} & Publish`}
                 </button>
                 <p className="text-[9px] text-center text-editorial-muted font-medium uppercase tracking-widest bg-editorial-bg py-2 rounded-lg border border-editorial-border/40">
-                  AFTER {calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || 0)} VIEWS, TOP UP{" "}
+                  AFTER {calculateFreeViews(templatePrices[formData.template || "royal-wedding"] || getTemplateById(formData.template || "royal-wedding")?.publishPrice || 0)} VIEWS, TOP UP{" "}
                   <span className="text-editorial-ink font-bold">₹99</span> TO GET{" "}
                   <span className="text-editorial-ink font-bold">1000 MORE VIEWS</span>
                 </p>

@@ -211,7 +211,7 @@ export default function KonaseemaWeddingTemplate({
     <>
       <AnimatePresence mode="wait">
         {/* ═══════════ INTRO VIDEO SCREEN ═══════════ */}
-        {!isInvitationOpen && introVideoUrl ? (
+        {!isInvitationOpen && introVideoUrl && introVideoUrl.trim() !== "" ? (
           <motion.div
             key="intro-video"
             className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-center cursor-pointer"
