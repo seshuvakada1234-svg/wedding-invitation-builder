@@ -58,10 +58,8 @@ export default function RoyalHeritageTemplate({
   const [stage, setStage] = useState<"tap" | "intro" | "main">("tap");
 
   // ─── Names overlay timing ─────────────────────────────────────────────────
-  // showNames: whether the names div is rendered & fading in
-  // fadeOutNames: triggers the fade-out CSS transition
-  const [showNames, setShowNames]       = useState(false);
-  const [fadeOutNames, setFadeOutNames] = useState(false);
+  // showNames: fades in at +4 s and stays visible until video ends (never fades out)
+  const [showNames, setShowNames] = useState(false);
 
   // ─── Refs ─────────────────────────────────────────────────────────────────
   // tapVideoRef  → muted/paused first-frame background on the tap screen
@@ -71,9 +69,8 @@ export default function RoyalHeritageTemplate({
   const audioRef      = useRef<HTMLAudioElement | null>(null);
   const canvasRef     = useRef<HTMLCanvasElement | null>(null);
 
-  // Timers that need cleanup
-  const namesTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fadeOutTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Timer that needs cleanup
+  const namesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Other state ─────────────────────────────────────────────────────────
   const [isPlayingMusic, setIsPlayingMusic] = useState(false);
@@ -185,17 +182,15 @@ export default function RoyalHeritageTemplate({
     if (cleared/(canvas.width*canvas.height)*100 > 45) setIsScratched(true);
   };
 
-  // ─── Clean up overlay timers ──────────────────────────────────────────────
+  // ─── Clean up overlay timer ───────────────────────────────────────────────
   const clearOverlayTimers = () => {
-    if (namesTimerRef.current)   { clearTimeout(namesTimerRef.current);   namesTimerRef.current   = null; }
-    if (fadeOutTimerRef.current) { clearTimeout(fadeOutTimerRef.current); fadeOutTimerRef.current = null; }
+    if (namesTimerRef.current) { clearTimeout(namesTimerRef.current); namesTimerRef.current = null; }
   };
 
   // ─── Open wedding website (shared helper) ─────────────────────────────────
   const openMainWebsite = () => {
     clearOverlayTimers();
     setShowNames(false);
-    setFadeOutNames(false);
     setStage("main");
     if (audioRef.current?.paused) {
       audioRef.current.play().then(()=>setIsPlayingMusic(true)).catch(()=>{});
@@ -203,36 +198,20 @@ export default function RoyalHeritageTemplate({
   };
 
   // ─── TAP SCREEN: user taps "Tap To Open" ──────────────────────────────────
-  // Transition: tap → intro
-  // • Start background music
-  // • Switch stage to "intro" → intro video will autoPlay via JSX attribute
   const handleTapToOpen = () => {
-    // Start audio
     if (audioRef.current) {
       audioRef.current.play().then(()=>setIsPlayingMusic(true)).catch(()=>{});
     }
-    // Reset overlay state for a clean intro
     setShowNames(false);
-    setFadeOutNames(false);
     setStage("intro");
   };
 
   // ─── INTRO VIDEO: started playing ─────────────────────────────────────────
-  // Schedule names overlay:
-  //   +4 000 ms → show names (fade in)
-  //   +6 500 ms → begin fade-out (visible 2.5 s)
+  // Names appear at +4 000 ms and stay visible until the video ends.
   const handleIntroVideoPlay = () => {
     clearOverlayTimers();
-
-    // After 4 s: show names
     namesTimerRef.current = setTimeout(() => {
       setShowNames(true);
-      setFadeOutNames(false);
-
-      // After another 2.5 s: fade them out
-      fadeOutTimerRef.current = setTimeout(() => {
-        setFadeOutNames(true);
-      }, 2500);
     }, 4000);
   };
 
@@ -277,35 +256,59 @@ export default function RoyalHeritageTemplate({
     <div className="font-['Poppins',sans-serif] bg-black text-[#d4c5a0] min-h-screen relative overflow-x-hidden select-none">
 
       <style>{`
-        .dc { font-family:'Cinzel',serif; }
-        .gv { font-family:'Great Vibes',cursive; }
-        .gg { text-shadow:0 0 18px rgba(212,175,55,0.55); }
+        .dc  { font-family:'Cinzel',serif; }
+        .gv  { font-family:'Great Vibes',cursive; }
+        .gg  { text-shadow:0 0 18px rgba(212,175,55,0.55); }
 
-        /* Names overlay — individual element fade-ins (triggered by .names-visible class) */
-        .names-line {
-          opacity: 0;
-          transform: translateY(20px);
-          transition: opacity 0.8s ease, transform 0.8s ease;
-        }
-        .names-visible .names-line-1 { opacity:1; transform:translateY(0); transition-delay: 0s;    }
-        .names-visible .names-line-2 { opacity:1; transform:translateY(0); transition-delay: 0.35s; }
-        .names-visible .names-line-3 { opacity:1; transform:translateY(0); transition-delay: 0.65s; }
-        .names-divider {
-          width: 0;
-          transition: width 0.9s ease 0.5s;
-        }
-        .names-visible .names-divider { width: 160px; }
-
-        /* Tap-to-open button pulse */
+        /* ── Tap-to-open button pulse ── */
         @keyframes goldenPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,0.5), 0 10px 30px rgba(212,175,55,0.4); }
-          50%       { box-shadow: 0 0 0 14px rgba(212,175,55,0), 0 10px 40px rgba(212,175,55,0.6); }
+          0%,100% { box-shadow:0 0 0 0 rgba(212,175,55,0.55),0 8px 32px rgba(212,175,55,0.35); }
+          50%     { box-shadow:0 0 0 18px rgba(212,175,55,0),0 12px 48px rgba(212,175,55,0.6); }
         }
-        .btn-tap { animation: goldenPulse 2.2s ease infinite; }
+        .btn-tap { animation: goldenPulse 2.4s ease infinite; }
 
-        @keyframes fadeSlideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes scaleIn     { from{opacity:0;transform:scale(0.88)}      to{opacity:1;transform:scale(1)} }
-        @keyframes expandW     { from{width:0} to{width:140px} }
+        /* ── Shimmer sweep across names ── */
+        @keyframes shimmer {
+          0%   { background-position: -200% center; }
+          100% { background-position:  200% center; }
+        }
+        .names-shimmer {
+          background: linear-gradient(
+            105deg,
+            #FFD700 0%,
+            #FFF5B0 30%,
+            #FFD700 50%,
+            #D4AF37 70%,
+            #FFD700 100%
+          );
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: shimmer 3.5s linear infinite;
+          filter: drop-shadow(0 0 18px rgba(212,175,55,0.7));
+        }
+
+        /* ── Divider expand ── */
+        @keyframes expandLine {
+          from { width: 0; opacity: 0; }
+          to   { width: 220px; opacity: 1; }
+        }
+        .divider-expand {
+          animation: expandLine 1s cubic-bezier(0.4,0,0.2,1) 0.4s both;
+        }
+
+        /* ── Subtitle glow ── */
+        .subtitle-gold {
+          color: #D4AF37;
+          text-shadow: 0 0 24px rgba(212,175,55,0.65), 0 1px 4px rgba(0,0,0,0.9);
+          letter-spacing: 0.35em;
+        }
+        .date-gold {
+          color: rgba(212,175,55,0.85);
+          text-shadow: 0 0 16px rgba(212,175,55,0.45), 0 1px 4px rgba(0,0,0,0.9);
+          letter-spacing: 0.28em;
+        }
       `}</style>
 
       {/* ── Floating music button (main only) ────────────────────────────── */}
@@ -349,19 +352,20 @@ export default function RoyalHeritageTemplate({
       ══════════════════════════════════════════════════════════════════════ */}
       <AnimatePresence mode="wait">
 
-        {/* ── STAGE 1: TAP SCREEN ─────────────────────────────────────────── */}
-        {/* Shows FIRST FRAME of intro video (muted, paused) as background.   */}
-        {/* No names or wedding text. Only the "Tap To Open" button.           */}
+        {/* ══════════════════════════════════════════════════
+            STAGE 1 — TAP SCREEN
+            First frame of intro video, paused. Button only.
+        ══════════════════════════════════════════════════ */}
         {stage === "tap" && (
           <motion.div
             key="tap-screen"
-            className="fixed inset-0 z-[10000] overflow-hidden"
+            className="fixed inset-0 z-[10000] overflow-hidden bg-black"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.8 }}
+            transition={{ duration: 0.7 }}
           >
-            {/* ── Background: intro video first frame, muted + paused ── */}
+            {/* First frame — muted, paused */}
             <video
               ref={tapVideoRef}
               src={introVideoUrl}
@@ -369,56 +373,42 @@ export default function RoyalHeritageTemplate({
               playsInline
               preload="auto"
               className="absolute inset-0 w-full h-full object-cover"
-              onLoadedData={(e) => {
-                // Seek to first frame and immediately pause
-                const v = e.currentTarget;
-                v.currentTime = 0;
-                v.pause();
-              }}
-              // If video is already loaded before React mounts onLoadedData, pause it anyway
-              onCanPlay={(e) => { e.currentTarget.pause(); }}
+              onLoadedData={(e) => { const v = e.currentTarget; v.currentTime = 0; v.pause(); }}
+              onCanPlay={(e)    => { e.currentTarget.pause(); }}
             />
 
-            {/* ── Cinematic dark overlay for readability ── */}
-            <div className="absolute inset-0 bg-black/60" />
+            {/* Dark cinematic overlay */}
+            <div className="absolute inset-0 bg-black/62" />
 
-            {/* ── Centered content: ONLY the Tap To Open button ── */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 1.1, delay: 0.4, ease: "easeOut" }}
-              className="relative z-10 h-full flex flex-col items-center justify-center px-6 text-center"
-            >
-              {/* Decorative top flourish */}
-              <div className="mb-8 flex flex-col items-center gap-3">
-                <div className="w-px h-16 bg-gradient-to-b from-transparent to-[#D4AF37]/60" />
-                <span className="dc text-[10px] tracking-[0.6em] text-[#D4AF37]/70 uppercase">Wedding Invitation</span>
-              </div>
-
-              {/* ── The ONLY CTA: large glowing gold Tap To Open button ── */}
-              <button
+            {/* Single centered button — nothing else */}
+            <div className="absolute inset-0 flex items-center justify-center z-10">
+              <motion.button
                 onClick={handleTapToOpen}
-                className="btn-tap relative px-12 py-5 bg-gradient-to-b from-[#D4AF37] to-[#b8960a] text-black font-bold uppercase tracking-[0.25em] dc rounded-full text-sm md:text-base border border-[#FFD700]/60 hover:from-[#FFD700] hover:to-[#d4af37] active:scale-95 transition-all duration-200 select-none"
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.9, delay: 0.55, ease: [0.22,1,0.36,1] }}
+                className="btn-tap dc font-bold uppercase select-none
+                  px-12 sm:px-16 py-4 sm:py-5
+                  text-sm sm:text-base
+                  tracking-[0.32em]
+                  rounded-full
+                  border-2 border-[#FFD700]/65
+                  bg-gradient-to-b from-[#E8C84A] via-[#D4AF37] to-[#A8840A]
+                  text-[#1a0e00]
+                  hover:from-[#FFD700] hover:to-[#C49B10]
+                  active:scale-95
+                  transition-colors duration-150"
               >
-                <span className="relative z-10">Tap To Open</span>
-              </button>
-
-              {/* Decorative bottom flourish */}
-              <div className="mt-8 flex flex-col items-center gap-3">
-                <div className="w-px h-16 bg-gradient-to-t from-transparent to-[#D4AF37]/60" />
-              </div>
-            </motion.div>
-
-            {/* Bottom hint */}
-            <p className="dc absolute bottom-8 w-full text-center text-[9px] tracking-[0.45em] text-white/30 uppercase select-none pointer-events-none">
-              ✦ &nbsp; Swipe up to begin &nbsp; ✦
-            </p>
+                Tap To Open
+              </motion.button>
+            </div>
           </motion.div>
         )}
 
-        {/* ── STAGE 2: INTRO VIDEO ─────────────────────────────────────────── */}
-        {/* Full-screen playback.                                               */}
-        {/* Names overlay fades in at +4 s, fades out at +6.5 s.               */}
+        {/* ══════════════════════════════════════════════════
+            STAGE 2 — INTRO VIDEO
+            Names fade in at +4 s, staggered, stay until end.
+        ══════════════════════════════════════════════════ */}
         {stage === "intro" && (
           <motion.div
             key="intro-video"
@@ -426,9 +416,9 @@ export default function RoyalHeritageTemplate({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.55 }}
           >
-            {/* ── Intro video — starts from beginning, auto-plays ── */}
+            {/* Full-screen video */}
             <video
               ref={introVideoRef}
               src={introVideoUrl}
@@ -440,56 +430,97 @@ export default function RoyalHeritageTemplate({
               className="absolute inset-0 w-full h-full object-cover"
             />
 
-            {/* ── Permanent cinematic scrim ── */}
-            <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+            {/* Cinematic gradient scrim — stronger at top/bottom */}
+            <div className="absolute inset-0 pointer-events-none"
+              style={{background:"linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.28) 40%, rgba(0,0,0,0.28) 60%, rgba(0,0,0,0.55) 100%)"}}
+            />
 
-            {/* ── Names overlay ──────────────────────────────────────────────
-                Outer wrapper controls the overall visibility fade:
-                  - Before showNames:   opacity 0, invisible
-                  - After showNames:    opacity 1 (individual elements animate in via CSS)
-                  - After fadeOutNames: opacity 0 with 1.2 s ease transition
-            ── */}
-            <div
-              className={`absolute inset-0 flex flex-col items-center justify-center text-center px-6 pointer-events-none z-10 ${showNames && !fadeOutNames ? "names-visible" : ""}`}
-              style={{
-                opacity:    showNames && !fadeOutNames ? 1 : 0,
-                transition: fadeOutNames
-                  ? "opacity 1.2s ease"          // fade out
-                  : showNames
-                    ? "opacity 0.4s ease"         // fade in
-                    : "none",
-              }}
-            >
-              {/* Line 1: "The Wedding of" */}
-              <p className="names-line names-line-1 dc text-[10px] sm:text-xs md:text-sm tracking-[0.55em] text-[#D4AF37] uppercase mb-4 sm:mb-5">
-                The Wedding of
-              </p>
+            {/* ── Names overlay — Framer Motion, staggered, stays until video ends ── */}
+            <AnimatePresence>
+              {showNames && (
+                <motion.div
+                  key="names-overlay"
+                  className="absolute inset-0 flex flex-col items-center justify-center text-center px-6 pointer-events-none z-10"
+                  initial="hidden"
+                  animate="visible"
+                  variants={{ hidden:{}, visible:{ transition:{ staggerChildren: 0.28 } } }}
+                >
+                  {/* ─── Names: Akhil ❤️ Sravya ─── */}
+                  <motion.h1
+                    variants={{
+                      hidden:   { opacity:0, y: 32, scale: 0.92 },
+                      visible:  { opacity:1, y:  0, scale:  1,
+                                  transition:{ duration:0.95, ease:[0.22,1,0.36,1] } },
+                    }}
+                    className="dc names-shimmer font-bold uppercase leading-none mb-0"
+                    style={{ fontSize:"clamp(2.4rem, 9vw, 6rem)", letterSpacing:"0.06em" }}
+                  >
+                    {groomName}
+                    <motion.span
+                      variants={{
+                        hidden:  { opacity:0, scale: 0.4 },
+                        visible: { opacity:1, scale: 1,
+                                   transition:{ duration:0.5, ease:"backOut", delay:0.1 } },
+                      }}
+                      className="inline-block mx-3 sm:mx-5"
+                      style={{ fontSize:"clamp(1.8rem, 6.5vw, 4.5rem)", WebkitTextFillColor:"initial", filter:"none" }}
+                      aria-label="love"
+                    >❤️</motion.span>
+                    {brideName}
+                  </motion.h1>
 
-              {/* Line 2: Groom & Bride names — large, golden, luxury */}
-              <h1 className="names-line names-line-2 dc text-4xl sm:text-6xl md:text-7xl font-bold tracking-widest leading-tight uppercase mb-1 sm:mb-2"
-                  style={{ color:"#FFD700", textShadow:"0 0 28px rgba(212,175,55,0.7), 0 2px 8px rgba(0,0,0,0.8)" }}>
-                {groomName}
-                <span className="text-[#8B0000] mx-3 sm:mx-5 text-3xl sm:text-5xl" aria-label="heart">❤️</span>
-                {brideName}
-              </h1>
+                  {/* ─── Expanding gold divider ─── */}
+                  <motion.div
+                    variants={{
+                      hidden:  { scaleX:0, opacity:0 },
+                      visible: { scaleX:1, opacity:1,
+                                 transition:{ duration:0.85, ease:[0.4,0,0.2,1] } },
+                    }}
+                    className="h-px my-5 sm:my-6 origin-center"
+                    style={{
+                      width:"clamp(140px,28vw,240px)",
+                      background:"linear-gradient(to right, transparent, #D4AF37, #FFD700, #D4AF37, transparent)",
+                      boxShadow:"0 0 12px rgba(212,175,55,0.5)",
+                    }}
+                  />
 
-              {/* Thin gold divider */}
-              <div
-                className="names-divider h-px bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent my-4 sm:my-5"
-                style={{ maxWidth:"160px" }}
-              />
+                  {/* ─── Wedding Invitation ─── */}
+                  <motion.p
+                    variants={{
+                      hidden:  { opacity:0, y: 18 },
+                      visible: { opacity:1, y:  0,
+                                 transition:{ duration:0.8, ease:"easeOut" } },
+                    }}
+                    className="dc subtitle-gold font-semibold uppercase mb-3 sm:mb-4"
+                    style={{ fontSize:"clamp(0.7rem, 2.6vw, 1.05rem)" }}
+                  >
+                    Wedding Invitation
+                  </motion.p>
 
-              {/* Line 3: "Wedding" label */}
-              <p className="names-line names-line-3 dc text-xs sm:text-sm md:text-base tracking-[0.4em] uppercase font-semibold"
-                 style={{ color:"#D4AF37", opacity: undefined /* controlled by parent */ }}>
-                Wedding
-              </p>
-            </div>
+                  {/* ─── 12 December 2026 ─── */}
+                  <motion.p
+                    variants={{
+                      hidden:  { opacity:0, y: 14 },
+                      visible: { opacity:1, y:  0,
+                                 transition:{ duration:0.75, ease:"easeOut" } },
+                    }}
+                    className="dc date-gold font-medium uppercase"
+                    style={{ fontSize:"clamp(0.62rem, 2vw, 0.9rem)" }}
+                  >
+                    {formatWeddingDate(date)}
+                  </motion.p>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            {/* ── Skip button ── */}
+            {/* Skip button */}
             <button
               onClick={(e) => { e.stopPropagation(); openMainWebsite(); }}
-              className="absolute top-5 right-5 sm:top-6 sm:right-6 z-[10000] px-4 sm:px-6 py-2 bg-black/60 border border-[#D4AF37]/30 text-[#FFD700] rounded-full text-[10px] sm:text-xs dc tracking-wider hover:bg-[#D4AF37]/20 transition-colors"
+              className="absolute top-5 right-5 sm:top-6 sm:right-6 z-[10000]
+                px-4 sm:px-6 py-2
+                bg-black/55 border border-[#D4AF37]/35 text-[#FFD700]
+                rounded-full text-[10px] sm:text-xs dc tracking-wider
+                hover:bg-[#D4AF37]/18 transition-colors"
             >
               Skip Intro
             </button>
@@ -776,3 +807,4 @@ export default function RoyalHeritageTemplate({
     </div>
   );
 }
+
