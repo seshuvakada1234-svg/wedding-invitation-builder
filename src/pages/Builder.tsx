@@ -239,6 +239,17 @@ export default function Builder() {
   }, [inviteId, initialTemplate, setFormData]);
 
   useEffect(() => {
+    if (inviteId) return;
+
+    setFormData((prev) => {
+      if (prev.template === initialTemplate) return prev;
+      return { ...prev, template: initialTemplate };
+    });
+
+    prevTemplateRef.current = initialTemplate;
+  }, [inviteId, initialTemplate, setFormData]);
+
+  useEffect(() => {
     // Reset editor state when opening an existing invite to prevent stale template/data leaks
     if (inviteId) {
       setFormData({
