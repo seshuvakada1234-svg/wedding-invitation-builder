@@ -1429,11 +1429,32 @@ export default function Builder() {
   };
 
   const loadRazorpay = () => {
-    return new Promise((resolve) => {
+    return new Promise<boolean>((resolve) => {
+      if ((window as any).Razorpay) {
+        resolve(true);
+        return;
+      }
+
+      const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]') as HTMLScriptElement | null;
+      if (existing) {
+        if ((existing as any).readyState === "complete" || existing.getAttribute("data-loaded") === "true") {
+          resolve(!!(window as any).Razorpay);
+          return;
+        }
+        existing.addEventListener("load", () => resolve(true), { once: true });
+        existing.addEventListener("error", () => resolve(false), { once: true });
+        setTimeout(() => resolve(!!(window as any).Razorpay), 6000);
+        return;
+      }
+
       const script = document.createElement("script");
       script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.onload = () => resolve(true);
+      script.onload = () => {
+        script.setAttribute("data-loaded", "true");
+        resolve(true);
+      };
       script.onerror = () => resolve(false);
+      setTimeout(() => resolve(!!(window as any).Razorpay), 6000);
       document.body.appendChild(script);
     });
   };
@@ -1472,6 +1493,14 @@ export default function Builder() {
       }
 
       const order = orderData.order;
+
+      const razorpayLoaded = await loadRazorpay();
+      if (!razorpayLoaded || !(window as any).Razorpay) {
+        console.error("Razorpay checkout.js did not load. window.Razorpay is missing.");
+        toast.error("Unable to load payment gateway. Please disable blockers and refresh.");
+        setIsProcessingPayment(false);
+        return;
+      }
 
       const options = {
         key: razorpayKeyId,
@@ -1555,6 +1584,14 @@ export default function Builder() {
       const orderData = await orderRes.json();
 
       if (!orderData.success) throw new Error(orderData.error || "Order failed");
+
+      const razorpayLoaded = await loadRazorpay();
+      if (!razorpayLoaded || !(window as any).Razorpay) {
+        console.error("Razorpay checkout.js did not load. window.Razorpay is missing.");
+        toast.error("Unable to load payment gateway. Please disable blockers and refresh.");
+        setIsProcessingPayment(false);
+        return;
+      }
 
       const options = {
         key: razorpayKeyId,
