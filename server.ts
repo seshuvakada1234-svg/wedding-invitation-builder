@@ -832,6 +832,16 @@ async function startServer() {
          inviteData.viewsUsed = 0;
       }
 
+      const isRedeploy = currentInvite.exists && (currentInvite.data()?.status === 'live' || currentInvite.data()?.published === true);
+      if (isRedeploy) {
+        inviteData.redeployCount = admin.firestore.FieldValue.increment(1);
+      } else {
+        inviteData.deployCount = admin.firestore.FieldValue.increment(1);
+      }
+      if (Array.isArray(inviteData.uploadedAssets) && inviteData.uploadedAssets.length > 0) {
+        inviteData.imageCount = admin.firestore.FieldValue.increment(inviteData.uploadedAssets.length);
+      }
+
       await db.collection("invites").doc(id).set(inviteData, { merge: true });
       await syncAdminImages(db, id, inviteData, "deploy");
       res.json({ success: true });

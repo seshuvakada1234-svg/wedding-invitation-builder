@@ -11,9 +11,10 @@ interface TimeLeft {
 interface CountdownTimerProps {
   targetDate: string;
   theme?: 'royal' | 'minimal' | 'coastal' | 'traditional';
+  className?: string;
 }
 
-export default function CountdownTimer({ targetDate, theme = 'royal' }: CountdownTimerProps) {
+export default function CountdownTimer({ targetDate, theme = 'royal', className = '' }: CountdownTimerProps) {
   const [timeLeft, setTimeLeft] = useState<TimeLeft | null>(null);
 
   useEffect(() => {
@@ -71,7 +72,7 @@ export default function CountdownTimer({ targetDate, theme = 'royal' }: Countdow
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className={styles.container}
+      className={`${styles.container} ${className}`}
     >
       {[
         { label: 'Days', value: timeLeft.days },

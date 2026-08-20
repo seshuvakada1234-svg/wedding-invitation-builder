@@ -1417,7 +1417,7 @@ export default function Builder() {
           });
         }
       } catch (dbErr) {
-        console.error("Failed to update deploy/redeploy counters in Firestore", dbErr);
+        console.warn("Deploy counters already updated by backend server:", dbErr);
       }
 
       setPublishedInviteId(id);

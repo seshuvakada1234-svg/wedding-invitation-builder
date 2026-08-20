@@ -13,7 +13,7 @@ service cloud.firestore {
     }
 
     function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+      return isSignedIn() && (request.auth.uid == userId || (request.auth.token.email != null && resource.data.email == request.auth.token.email));
     }
 
     function isAdmin() {
@@ -40,21 +40,25 @@ service cloud.firestore {
 
     // --- Invite Validation ---
     function isValidInvite(data) {
-      return data.userId == request.auth.uid 
-        && (data.brideName == null || (data.brideName is string && data.brideName.size() <= 100))
-        && (data.groomName == null || (data.groomName is string && data.groomName.size() <= 100))
-        && (data.weddingDate == null || (data.weddingDate is string && data.weddingDate.size() <= 100))
-        && (data.location == null || (data.location is string && data.location.size() <= 200))
-        && (data.template == null || (data.template is string && data.template.size() <= 100))
+      return (data.userId == request.auth.uid || isAdmin() || (data.email != null && data.email == request.auth.token.email))
+        && (data.brideName == null || (data.brideName is string && data.brideName.size() <= 200))
+        && (data.groomName == null || (data.groomName is string && data.groomName.size() <= 200))
+        && (data.weddingDate == null || (data.weddingDate is string && data.weddingDate.size() <= 200))
+        && (data.location == null || (data.location is string && data.location.size() <= 1000))
+        && (data.template == null || (data.template is string && data.template.size() <= 200))
+        && (data.templateId == null || (data.templateId is string && data.templateId.size() <= 200))
         && (data.views == null || (data.views is number && data.views >= 0))
+        && (data.viewsLimit == null || (data.viewsLimit is number && data.viewsLimit >= 0))
+        && (data.viewsUsed == null || (data.viewsUsed is number && data.viewsUsed >= 0))
         && (data.viewLimit == null || (data.viewLimit is number && data.viewLimit >= 0))
-        && (data.slug == null || (data.slug is string && data.slug.size() <= 128))
+        && (data.slug == null || (data.slug is string && data.slug.size() <= 256))
         && (data.isPaid == null || data.isPaid is bool)
         && (data.galleryImages == null || data.galleryImages is list)
         && (data.galleryImageKeys == null || data.galleryImageKeys is list)
         && (data.events == null || data.events is list)
         && (data.createdAt == null || data.createdAt is string || data.createdAt is timestamp)
         && (data.updatedAt == null || data.updatedAt is string || data.updatedAt is timestamp)
+        && (data.publishedAt == null || data.publishedAt is string || data.publishedAt is timestamp)
         && (data.status == null || data.status is string)
         && (data.published == null || data.published is bool)
         && (data.draftData == null || data.draftData is map)
@@ -70,21 +74,25 @@ service cloud.firestore {
       // get is public so anyone can view an invite if they have the ID/slug
       allow get: if true;
 
-      // list is restricted to signed-in users. 
-      // Individual documents are still protected by get/update/delete rules.
-      // We rely on the client to filter by userId, but this prevents unauthenticated listing.
+      // list is restricted to signed-in users.
       allow list: if isSignedIn();
 
-      // ✅ FIXED CREATE RULE
       allow create: if isSignedIn() 
         && isValidId(inviteId)
-        && isValidInvite(incoming())
-        && (incoming().isPaid == false || isAdmin())
-        && (incoming().views == 0 || isAdmin());
+        && (
+          isAdmin() || (
+            (incoming().userId == request.auth.uid || incoming().email == request.auth.token.email)
+            && (incoming().isPaid == null || incoming().isPaid == false)
+            && (incoming().views == null || incoming().views == 0)
+          )
+        );
 
-      allow update: if isSignedIn() && (isAdmin() || isOwner(existing().userId)) && isValidInvite(incoming());
+      allow update: if isSignedIn() && (
+        isAdmin() || 
+        (existing().userId == request.auth.uid || existing().email == request.auth.token.email)
+      );
 
-      allow delete: if isAdmin() || (isSignedIn() && isOwner(existing().userId));
+      allow delete: if isAdmin() || (isSignedIn() && (existing().userId == request.auth.uid || existing().email == request.auth.token.email));
     }
     
     // --- Collection: Admins ---
