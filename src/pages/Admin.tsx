@@ -60,7 +60,6 @@ function formatDate(val: any): string {
 function getTemplateName(templateId: string): string {
   const id = (templateId || "").toLowerCase().trim();
   if (id === "royal-wedding" || id === "royal") return "Royal-Wedding";
-  if (id === "kerala" || id === "kerala-wedding") return "Kerala-Wedding";
   if (id === "kerala-envelope-reveal" || id === "kerala-reveal") return "Kerala-Envelope-Reveal";
   if (id === "housewarming-south" || id === "housewarming") return "Housewarming-South";
   if (id === "south-india") return "South-India";

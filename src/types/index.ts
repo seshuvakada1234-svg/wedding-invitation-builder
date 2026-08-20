@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type TemplateType = 'royal-wedding' | 'konaseema' | 'kerala-wedding' | 'kerala-envelope-reveal' | 'housewarming-south' | 'south-india' | 'royal-emerald' | 'royal-heritage';
+export type TemplateType = 'royal-wedding' | 'konaseema' | 'kerala-envelope-reveal' | 'housewarming-south' | 'south-india' | 'royal-emerald' | 'royal-heritage';
 
 export interface WeddingEvent {
   name: string;

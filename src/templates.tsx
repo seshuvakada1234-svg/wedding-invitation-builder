@@ -7,7 +7,6 @@ import React, { useRef, useState, useEffect } from "react";
 import { motion } from "motion/react";
 import IndianRoyalWeddingTemplate from "./components/templates/IndianRoyalWeddingTemplate";
 import KonaseemaWeddingTemplate from "./components/templates/KonaseemaWeddingTemplate";
-import KeralaWeddingTemplate from "./components/templates/KeralaWeddingTemplate";
 import KeralaRevealTemplate from "./components/templates/KeralaRevealTemplate";
 import SouthIndianHousewarmingTemplate from "./components/templates/SouthIndianHousewarmingTemplate";
 import SouthIndiaTemplate from "./components/templates/SouthIndiaTemplate";
@@ -90,14 +89,6 @@ export const templates: TemplateConfig[] = [
     thumbnail: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=800",
     previewImage: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=1200",
     component: KonaseemaWeddingTemplate,
-  },
-  {
-    id: "kerala-wedding",
-    name: "Kerala Wedding",
-    category: "classic",
-    thumbnail: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=800",
-    previewImage: "https://images.unsplash.com/photo-1544124499-58912cbddaad?auto=format&fit=crop&q=80&w=1200",
-    component: KeralaWeddingTemplate,
   },
   {
     id: "kerala-envelope-reveal",

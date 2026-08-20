@@ -74,7 +74,6 @@ import { calculateFreeViews } from "../lib/pricing";
 const TEMPLATE_DEFAULTS: Record<string, string[]> = {
   "royal-wedding": ["Haldi", "Mehendi", "Sangeet", "Wedding"],
   konaseema: ["Pellikuthuru", "Haldi", "Mehendi", "Wedding"],
-  "kerala-wedding": ["Madhuramveypu", "Nischaayam", "Wedding", "Reception"],
   "kerala-envelope-reveal": ["Pellikuthuru", "Haldi", "Mehendi", "Wedding"],
   "housewarming-south": ["Gruha Pravesh", "Satyanarayana Vratham"],
   "royal-emerald": ["Haldi", "Mehendi", "Sangeet", "Wedding"],
