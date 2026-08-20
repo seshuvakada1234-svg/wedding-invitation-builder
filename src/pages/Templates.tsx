@@ -38,7 +38,7 @@ export default function TemplatesPage() {
   // ── Load dynamic templates & prices from Firestore ────────────────────────
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "templates"), (snap) => {
-      const tList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const tList = snap.docs.map(doc => ({ ...doc.data(), id: doc.id }));
       setDbTemplates(tList);
     });
     return () => unsub();
@@ -82,6 +82,7 @@ export default function TemplatesPage() {
     return {
       ...tplCode,
       ...tplDb,
+      id: tplCode.id,
       enabled: tplDb ? tplDb.enabled : true,
     };
   }).filter(t => t.enabled !== false);
