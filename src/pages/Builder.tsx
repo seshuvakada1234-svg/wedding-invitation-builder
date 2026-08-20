@@ -1520,6 +1520,12 @@ export default function Builder() {
         name: "Wedding Invitation",
         description: "Publish Your Invitation",
         order_id: order.id,
+        modal: {
+          ondismiss: () => {
+            toast.error("Payment cancelled.");
+            setIsProcessingPayment(false);
+          },
+        },
         handler: async function (response: any) {
           try {
             const verifyRes = await fetch("/api/verify-payment", {
@@ -1537,6 +1543,9 @@ export default function Builder() {
                 templateId: currentTemplate,
               }),
             });
+            if (!verifyRes.ok) {
+              throw new Error("Payment verification request failed");
+            }
             const verifyData = await verifyRes.json();
 
             if (verifyData.success) {
@@ -1564,7 +1573,18 @@ export default function Builder() {
       };
 
       const rzp = new (window as any).Razorpay(options);
-      rzp.open();
+      rzp.on("payment.failed", (response: any) => {
+        console.error("Razorpay payment failed:", response?.error || response);
+        toast.error(response?.error?.description || "Payment failed. Please try again.");
+        setIsProcessingPayment(false);
+      });
+      try {
+        rzp.open();
+      } catch (openError) {
+        console.error("Razorpay open error:", openError);
+        toast.error("Unable to open payment gateway. Please try again.");
+        setIsProcessingPayment(false);
+      }
     } catch (error: any) {
       console.error("Payment initialization error:", error);
       toast.error(error.message || "Payment initiation failed");
@@ -1611,6 +1631,12 @@ export default function Builder() {
         name: "Wedding Invitation",
         description: "Redeploy Your Invitation",
         order_id: orderData.order.id,
+        modal: {
+          ondismiss: () => {
+            toast.error("Payment cancelled.");
+            setIsProcessingPayment(false);
+          },
+        },
         handler: async function (response: any) {
           try {
             const verifyRes = await fetch("/api/verify-redeploy-payment", {
@@ -1626,6 +1652,9 @@ export default function Builder() {
                 inviteId: formData.id || inviteId,
               }),
             });
+            if (!verifyRes.ok) {
+              throw new Error("Payment verification request failed");
+            }
             const verifyData = await verifyRes.json();
 
             if (verifyData.success) {
@@ -1653,7 +1682,18 @@ export default function Builder() {
       };
 
       const rzp = new (window as any).Razorpay(options);
-      rzp.open();
+      rzp.on("payment.failed", (response: any) => {
+        console.error("Razorpay redeploy payment failed:", response?.error || response);
+        toast.error(response?.error?.description || "Payment failed. Please try again.");
+        setIsProcessingPayment(false);
+      });
+      try {
+        rzp.open();
+      } catch (openError) {
+        console.error("Razorpay open error:", openError);
+        toast.error("Unable to open payment gateway. Please try again.");
+        setIsProcessingPayment(false);
+      }
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "Redeploy failed");
