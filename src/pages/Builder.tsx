@@ -73,11 +73,11 @@ import { calculateFreeViews } from "../lib/pricing";
 
 const TEMPLATE_DEFAULTS: Record<string, string[]> = {
   "royal-wedding": ["Haldi", "Mehendi", "Sangeet", "Wedding"],
-  konaseema: ["Pellikuthuru", "Haldi", "Mehendi", "Wedding"],
   "kerala-envelope-reveal": ["Pellikuthuru", "Haldi", "Mehendi", "Wedding"],
   "housewarming-south": ["Gruha Pravesh", "Satyanarayana Vratham"],
   "royal-emerald": ["Haldi", "Mehendi", "Sangeet", "Wedding"],
   "royal-heritage": ["Haldi", "Mehendi", "Sangeet", "Wedding"],
+  "royal-rajasthani": ["Ganesh Puja", "Mehendi & Sangeet", "Haldi Ceremony", "Royal Wedding", "Reception"],
 };
 
 const GALLERY_DEFAULTS: Record<string, string[]> = {

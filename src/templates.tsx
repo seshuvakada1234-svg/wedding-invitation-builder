@@ -6,12 +6,12 @@
 import React, { useRef, useState, useEffect } from "react";
 import { motion } from "motion/react";
 import IndianRoyalWeddingTemplate from "./components/templates/IndianRoyalWeddingTemplate";
-import KonaseemaWeddingTemplate from "./components/templates/KonaseemaWeddingTemplate";
 import KeralaRevealTemplate from "./components/templates/KeralaRevealTemplate";
 import SouthIndianHousewarmingTemplate from "./components/templates/SouthIndianHousewarmingTemplate";
 import SouthIndiaTemplate from "./components/templates/SouthIndiaTemplate";
 import RoyalEmeraldTemplate from "./components/templates/RoyalEmeraldTemplate";
 import RoyalHeritageTemplate from "./components/templates/RoyalHeritageTemplate";
+import RoyalRajasthaniTemplate from "./components/templates/RoyalRajasthaniTemplate";
 import { WeddingEvent } from "./types";
 import { calculateFreeViews } from "./lib/pricing";
 
@@ -83,14 +83,6 @@ export const templates: TemplateConfig[] = [
     component: IndianRoyalWeddingTemplate,
   },
   {
-    id: "konaseema",
-    name: "Konaseema Heritage",
-    category: "classic",
-    thumbnail: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=800",
-    previewImage: "https://images.unsplash.com/photo-1595191151664-213fb01cc3a7?auto=format&fit=crop&q=80&w=1200",
-    component: KonaseemaWeddingTemplate,
-  },
-  {
     id: "kerala-envelope-reveal",
     name: "Kerala Envelope Reveal",
     category: "premium",
@@ -122,6 +114,15 @@ export const templates: TemplateConfig[] = [
     thumbnail: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=800",
     previewImage: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=1200",
     component: RoyalHeritageTemplate as any,
+  },
+  {
+    id: "royal-rajasthani",
+    name: "Royal Rajasthani Grandeur",
+    category: "premium",
+    publishPrice: 1499,
+    thumbnail: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=800",
+    previewImage: "https://images.unsplash.com/photo-1583939003579-730e3918a45a?auto=format&fit=crop&q=80&w=1200",
+    component: RoyalRajasthaniTemplate as any,
   }
 ];
 
