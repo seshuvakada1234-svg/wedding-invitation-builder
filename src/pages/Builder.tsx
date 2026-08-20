@@ -245,8 +245,6 @@ export default function Builder() {
       if (prev.template === initialTemplate) return prev;
       return { ...prev, template: initialTemplate };
     });
-
-    prevTemplateRef.current = initialTemplate;
   }, [inviteId, initialTemplate, setFormData]);
 
   useEffect(() => {
@@ -670,6 +668,7 @@ export default function Builder() {
             ...existingNewDraft,
             templateDrafts: updatedDrafts,
             template: newTemplate,
+            templateId: newTemplate,
           };
         } else {
           // New starting point for this template
@@ -678,6 +677,7 @@ export default function Builder() {
             ...prev,
             templateDrafts: updatedDrafts,
             template: newTemplate,
+            templateId: newTemplate,
             galleryImages: GALLERY_DEFAULTS[newTemplate] || GALLERY_DEFAULTS["default"],
             events: defaultEventNames.map((name) => ({
               name,
